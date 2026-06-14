@@ -3,75 +3,33 @@ const axios = require('axios');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const MANGADEX_API = 'https://api.mangadex.org';
+// Free Open Manga Provider Endpoint
+const MANGA_API = 'https://api.consumet.org/manga/mangafire';
 
-// Pre-defined MangaDex UUID tags for filtering genres
-const GENRES = {
-    "All": "",
-    "Action": "391b0423-d847-456f-aff0-8b0cfc03066b",
-    "Romance": "423e2eae-a7a2-4a8b-ac03-a8351462d71d",
-    "Sci-Fi": "256c8064-7c61-4a13-8a7a-ab24156d2b7b",
-    "Comedy": "4d32b451-2632-4861-a4d8-accf0a5c73d3",
-    "Drama": "b9af3a63-f058-41d4-a070-d473d667e1fb",
-    "Erotica": "97893a4c-12af-4dac-b6be-5257f1856150" // Explicit Content Tag
-};
-
-// Main CSS theme that renders efficiently on Nokia 216 / Opera Mini
 const UI_STYLE = `
     <style>
         body { background: #0b0f19; color: #f3f4f6; font-family: monospace; padding: 8px; margin: 0; }
         a { color: #38bdf8; text-decoration: none; font-size: 15px; }
-        input, button, select { padding: 8px; font-size: 14px; width: 100%; margin-bottom: 10px; background: #1e293b; color: #fff; border: 1px solid #475569; border-radius: 4px; box-sizing: border-box; }
-        button { background: #2563eb; font-weight: bold; border: none; cursor: pointer; }
-        .btn-green { background: #16a34a; color: #fff; padding: 8px; font-weight: bold; display: inline-block; border-radius: 3px; }
-        .btn-orange { background: #ea580c; color: #fff; padding: 8px; font-weight: bold; display: inline-block; border-radius: 3px; }
+        input, button { padding: 8px; font-size: 14px; width: 100%; margin-bottom: 10px; background: #1e293b; color: #fff; border: 1px solid #475569; border-radius: 4px; box-sizing: border-box; }
+        button { background: #2563eb; font-weight: bold; border: none; }
         .genre-link { display: inline-block; background: #334155; color: #fff; padding: 4px 8px; margin: 3px; border-radius: 3px; font-size: 12px; }
         ul { padding-left: 15px; margin: 10px 0; }
         li { margin-bottom: 12px; }
     </style>
 `;
 
-// Home Page: Includes Search, Genre Filters, and Infinite Browsing
+// Home Page
 app.get('/', async (req, res) => {
-    const page = parseInt(req.query.page) || 0;
-    const selectedGenre = req.query.genre || "";
-    const limit = 10;
-    const offset = page * limit;
     let listHtml = '';
-    
-    // Build Genre Filter UI row
-    let genreFilterUi = '<div>';
-    for (const [key, val] of Object.entries(GENRES)) {
-        const activeColor = selectedGenre === val ? 'background:#2563eb;' : '';
-        genreFilterUi += `<a class="genre-link" style="${activeColor}" href="/?genre=${val}">${key}</a> `;
-    }
-    genreFilterUi += '</div>';
-
     try {
-        const params = {
-            limit: limit,
-            offset: offset,
-            order: { followedCount: 'desc' },
-            availableTranslatedLanguage: ['en'],
-            contentRating: ['safe', 'suggestive', 'erotica', 'pornographic'] // Allows adult content requested
-        };
-
-        if (selectedGenre) {
-            params.includedTags = [selectedGenre];
-        }
-
-        const response = await axios.get(`${MANGADEX_API}/manga`, { params });
-
-        response.data.data.forEach(manga => {
-            const name = manga.attributes.title.en || Object.values(manga.attributes.title)[0] || 'Unknown Title';
-            listHtml += `<li><a href="/manga/${manga.id}" style="color: #4ade80; font-weight:bold;">${name}</a></li>`;
+        // Fetch trending items directly from alternative index
+        const response = await axios.get(`${MANGA_API}/trending`, { timeout: 8000 });
+        response.data.results.forEach(manga => {
+            listHtml += `<li><a href="/manga?id=${encodeURIComponent(manga.id)}" style="color: #4ade80; font-weight:bold;">${manga.title}</a></li>`;
         });
     } catch (err) {
-        listHtml = '<li>Failed to load items. Tap refresh.</li>';
+        listHtml = '<li>Failed to fetch trending. Use search bar below!</li>';
     }
-
-    const nextPage = page + 1;
-    const prevPage = page > 0 ? `<a href="/?page=${page - 1}&genre=${selectedGenre}" style="color:#f97316;"><- Previous</a> | ` : '';
 
     res.send(`
         <html>
@@ -80,48 +38,41 @@ app.get('/', async (req, res) => {
             ${UI_STYLE}
         </head>
         <body>
-            <h2 style="color:#2563eb; margin:5px 0;">Nokia Manga Pro</h2>
+            <h2 style="color:#2563eb; margin:5px 0;">Nokia Manga Pro v2</h2>
             
             <form action="/search" method="GET">
-                <input type="text" name="title" placeholder="Search text..." required />
+                <input type="text" name="title" placeholder="Search (e.g. Solo Leveling)" required />
                 <button type="submit">Search</button>
             </form>
             
-            <h4 style="margin:10px 0 5px 0;">Filter By Genre:</h4>
-            ${genreFilterUi}
+            <h4 style="margin:10px 0 5px 0;">Quick Genres:</h4>
+            <div>
+                <a class="genre-link" href="/search?title=action">Action</a>
+                <a class="genre-link" href="/search?title=romance">Romance</a>
+                <a class="genre-link" href="/search?title=sci-fi">Sci-Fi</a>
+                <a class="genre-link" href="/search?title=comedy">Comedy</a>
+                <a class="genre-link" href="/search?title=horror">Horror</a>
+            </div>
             <hr style="border-color: #334155; margin: 15px 0;"/>
             
-            <h3>Explore Titles:</h3>
+            <h3>Trending Manga:</h3>
             <ul>${listHtml}</ul>
-
-            <div style="margin: 20px 0; text-align: center;">
-                ${prevPage}
-                <a href="/?page=${nextPage}&genre=${selectedGenre}" style="color:#38bdf8; font-weight:bold;">Load More -></a>
-            </div>
         </body>
         </html>
     `);
 });
 
-// Search Endpoint
+// Search Route
 app.get('/search', async (req, res) => {
     const title = req.query.title;
     if (!title) return res.redirect('/');
 
     try {
-        const response = await axios.get(`${MANGADEX_API}/manga`, {
-            params: { 
-                title: title, 
-                limit: 20,
-                availableTranslatedLanguage: ['en'],
-                contentRating: ['safe', 'suggestive', 'erotica', 'pornographic']
-            }
-        });
-        
+        const response = await axios.get(`${MANGA_API}/${encodeURIComponent(title)}`);
         let listHtml = '';
-        response.data.data.forEach(manga => {
-            const name = manga.attributes.title.en || Object.values(manga.attributes.title)[0] || 'Unknown Title';
-            listHtml += `<li><a href="/manga/${manga.id}" style="color: #4ade80;">${name}</a></li>`;
+        
+        response.data.results.forEach(manga => {
+            listHtml += `<li><a href="/manga?id=${encodeURIComponent(manga.id)}" style="color: #4ade80;">${manga.title}</a></li>`;
         });
 
         res.send(`
@@ -129,55 +80,44 @@ app.get('/search', async (req, res) => {
             <head>${UI_STYLE}</head>
             <body>
                 <h3>Results for "${title}":</h3>
-                <ul>${listHtml || '<li>No matching English entries found.</li>'}</ul>
+                <ul>${listHtml || '<li>No results found.</li>'}</ul>
                 <br/>
                 <a href="/" style="color:#ef4444;"><- Home</a>
             </body>
             </html>
         `);
     } catch (err) {
-        res.status(500).send("Search route error.");
+        res.status(500).send("Search pipeline failed.");
     }
 });
 
-// Manga Chapter Feed List
-app.get('/manga/:id', async (req, res) => {
+// Info & Chapters List
+app.get('/manga', async (req, res) => {
+    const mangaId = req.query.id;
     try {
-        const response = await axios.get(`${MANGADEX_API}/manga/${req.params.id}/feed`, {
-            params: { 
-                limit: 500, 
-                order: { chapter: 'asc' }, 
-                translatedLanguage: ['en'],
-                contentRating: ['safe', 'suggestive', 'erotica', 'pornographic']
-            }
-        });
+        const response = await axios.get(`${MANGA_API}/info?id=${encodeURIComponent(mangaId)}`);
+        const chapters = response.data.chapters;
 
-        const chapters = response.data.data;
         if (!chapters || chapters.length === 0) {
-            return res.send(`<body style="background:#0b0f19; color:#fff; font-family:monospace;"><p>No English chapters found.</p><a href="/">Home</a></body>`);
+            return res.send(`<body>No readable chapters found. <a href="/">Back</a></body>`);
         }
-
-        const firstChapterId = chapters[0].id;
-        const lastChapterId = chapters[chapters.length - 1].id;
 
         let chapterHtml = '';
         chapters.forEach(chap => {
-            const volStr = chap.attributes.volume ? `Vol.${chap.attributes.volume} ` : '';
-            const chapStr = chap.attributes.chapter ? `Ch.${chap.attributes.chapter}` : 'Spec';
-            const title = chap.attributes.title ? ` - ${chap.attributes.title}` : '';
-            chapterHtml += `<li><a href="/chapter/${chap.id}">${volStr}${chapStr}${title}</a></li>`;
+            chapterHtml += `<li><a href="/chapter?id=${encodeURIComponent(chap.id)}">${chap.title || 'Chapter ' + chap.number}</a></li>`;
         });
 
         res.send(`
             <html>
             <head>${UI_STYLE}</head>
             <body>
-                <h3>Controls:</h3>
-                <div style="margin:10px 0;">
-                    <a href="/chapter/${firstChapterId}" class="btn-green">READ FROM START</a>
-                    <a href="/chapter/${lastChapterId}" class="btn-orange">READ FROM END</a>
-                </div>
+                <h3>${response.data.title}</h3>
+                <p style="font-size:12px; color:#94a3b8;">${response.data.description || 'No description.'}</p>
                 <hr style="border-color:#334155;"/>
+                <div style="margin:10px 0;">
+                    <a href="/chapter?id=${encodeURIComponent(chapters[0].id)}" style="background:#16a34a; color:#fff; padding:6px; font-weight:bold;">START</a>
+                    <a href="/chapter?id=${encodeURIComponent(chapters[chapters.length-1].id)}" style="background:#ea580c; color:#fff; padding:6px; font-weight:bold; margin-left:5px;">END</a>
+                </div>
                 <h3>Chapters (${chapters.length}):</h3>
                 <ul>${chapterHtml}</ul>
                 <br/>
@@ -186,42 +126,38 @@ app.get('/manga/:id', async (req, res) => {
             </html>
         `);
     } catch (err) {
-        res.status(500).send("Error compiling target chapter feed index.");
+        res.status(500).send("Error loading manga properties.");
     }
 });
 
-// Chapter Viewer with Stable Image Fallbacks and Fixed Proxies
-app.get('/chapter/:id', async (req, res) => {
+// Chapter Reader Routing
+app.get('/chapter', async (req, res) => {
+    const chapterId = req.query.id;
+    const pageIndex = parseInt(req.query.p) || 0;
+
     try {
-        const pageIndex = parseInt(req.query.p) || 0;
+        const response = await axios.get(`${MANGA_API}/read?chapterId=${encodeURIComponent(chapterId)}`);
+        const pages = response.data;
 
-        const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`);
-        const hash = connResponse.data.chapter.hash;
-        
-        let pageArray = connResponse.data.chapter.dataSaver;
-        let folder = 'data-saver';
-        
-        if (!pageArray || pageArray.length === 0) {
-            pageArray = connResponse.data.chapter.data;
-            folder = 'data';
+        if (!pages || pages.length === 0) {
+            return res.send("Chapter pages are unavailable.");
         }
 
-        if (pageIndex < 0 || pageIndex >= pageArray.length) {
-            return res.send(`<html><head>${UI_STYLE}</head><body><h3>End of Chapter</h3><a href="/">Return Home</a></body></html>`);
+        if (pageIndex < 0 || pageIndex >= pages.length) {
+            return res.send(`<html><body><h3>Chapter Finished</h3><a href="/">Home</a></body></html>`);
         }
 
-        // Standard direct CDN URL
-        const directImgUrl = `${connResponse.data.baseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
+        const targetPageImg = pages[pageIndex].img;
         
-        // Anti-CORS Fallback Proxy: Routes the image request through an open origin proxy if standard rendering breaks
-        const proxyImgUrl = `https://images.weserv.nl/?url=${encodeURIComponent(directImgUrl)}&output=jpg&q=70`;
+        // SAFE PROXY ROUTE: Tells your Render server to download the image directly and stream it to the Nokia 
+        const proxyImgUrl = `/proxy-image?url=${encodeURIComponent(targetPageImg)}`;
 
-        const nextLink = pageIndex < pageArray.length - 1 
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}" style="color:#4ade80; font-size:20px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:10px 0; border-radius:4px; border:1px solid #475569;">TAP FOR NEXT PAGE -></a>` 
-            : '<span style="color:#94a3b8; display:block; margin:10px 0;">Chapter Complete</span>';
+        const nextLink = pageIndex < pages.length - 1 
+            ? `<a href="/chapter?id=${encodeURIComponent(chapterId)}&p=${pageIndex + 1}" style="color:#4ade80; font-size:20px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:10px 0; border:1px solid #475569;">NEXT PAGE -></a>` 
+            : '<span style="color:#94a3b8;">End of Chapter</span>';
             
         const prevLink = pageIndex > 0 
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}" style="color:#f97316;"><- Previous Page</a>` 
+            ? `<a href="/chapter?id=${encodeURIComponent(chapterId)}&p=${pageIndex - 1}" style="color:#f97316;"><- Previous Page</a>` 
             : '';
 
         res.send(`
@@ -231,25 +167,49 @@ app.get('/chapter/:id', async (req, res) => {
                 ${UI_STYLE}
             </head>
             <body style="text-align:center;">
-                <div style="padding:5px; background:#1e293b; font-size:13px; color:#94a3b8;">Page ${pageIndex + 1} / ${pageArray.length}</div>
+                <div style="padding:5px; background:#1e293b; font-size:13px;">Page ${pageIndex + 1} / ${pages.length}</div>
                 
                 <div style="margin: 10px 0;">
-                    <img src="${proxyImgUrl}" style="width:100%; max-width:320px; height:auto; border:1px solid #334155;" alt="Loading... If page stays blank, refresh." />
+                    <img src="${proxyImgUrl}" style="width:100%; max-width:320px; height:auto; border:1px solid #334155;" alt="Loading content..." />
                 </div>
 
-                <div style="margin:15px 0; padding:0 5px;">
+                <div style="margin:15px 0;">
                     ${nextLink}
                     <br/>
                     ${prevLink}
                 </div>
                 <hr style="border-color:#334155;"/>
-                <a href="/" style="color:#ef4444;">Exit Reader</a>
+                <a href="/" style="color:#ef4444;">Main Menu</a>
             </body>
             </html>
         `);
     } catch (err) {
-        res.send(`<html><head>${UI_STYLE}</head><body><h3>Page Context Block Error</h3><p>MangaDex dropped this image node connection.</p><a href="javascript:history.back()">Go Back</a></body></html>`);
+        res.status(500).send("Reader encountered an explicit hosting error.");
     }
 });
 
-app.listen(PORT, () => console.log(`Engine optimized on port ${PORT}`));
+// The Anti-Block Image Server Proxy
+app.get('/proxy-image', async (req, res) => {
+    const targetUrl = req.query.url;
+    if (!targetUrl) return res.status(400).send("No target url specified.");
+
+    try {
+        const imageResponse = await axios({
+            method: 'get',
+            url: targetUrl,
+            responseType: 'stream',
+            headers: {
+                'Referer': 'https://mangafire.to/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+
+        // Tells your phone it is receiving a normal JPEG image
+        res.setHeader('Content-Type', 'image/jpeg');
+        imageResponse.data.pipe(res);
+    } catch (e) {
+        res.status(500).send("Image proxy download failed.");
+    }
+});
+
+app.listen(PORT, () => console.log(`Unblockable server streaming on port ${PORT}`));
