@@ -26,8 +26,13 @@ const UI_STYLE = `
         li { margin-bottom: 10px; }
         .btn-green { background: #16a34a; color: #fff; padding: 6px; font-weight: bold; display: inline-block; border-radius: 2px; margin-right: 4px; text-decoration: none; }
         .btn-orange { background: #ea580c; color: #fff; padding: 6px; font-weight: bold; display: inline-block; border-radius: 2px; text-decoration: none; }
+        
+        /* Interactive Zoom Buttons Style */
+        .zoom-control-btn { display: inline-block; background: #2563eb; color: #ffffff; padding: 6px 12px; font-weight: bold; font-size: 13px; border: 1px solid #3b82f6; border-radius: 3px; text-decoration: none; margin: 3px; }
+        .zoom-control-btn:focus { background: #eab308; color: #000000; border-color: #ffffff; }
+        
         .scroll-container { width: 100%; overflow-x: auto; overflow-y: hidden; background: #000; border-top: 1px solid #334155; border-bottom: 1px solid #334155; text-align: left; }
-        .key-hint { font-size: 11px; color: #94a3b8; background: #111827; padding: 4px; margin: 4px 0; display: block; border-radius: 2px; }
+        .img-link { display: block; border: none; text-decoration: none; padding: 0; margin: 0; }
     </style>
 `;
 
@@ -156,13 +161,11 @@ app.get('/manga/:id', async (req, res) => {
     }
 });
 
-// 4. Chapter Viewer (With 5 and 6 Keypad Controls)
+// 4. Chapter Viewer (Fixed Native Selectable Target Engine)
 app.get('/chapter/:id', async (req, res) => {
     try {
         const pageIndex = parseInt(req.query.p) || 0;
-        
-        // Default zoom is 100%. Each tap increases/decreases by 75% steps dynamically.
-        const currentZoom = parseInt(req.query.z) || 100; 
+        const currentZoom = parseInt(req.query.z) || 100; // Track screen multiplier integer percentage
 
         const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`, { timeout: 8000 });
         const hash = connResponse.data.chapter.hash;
@@ -182,18 +185,21 @@ app.get('/chapter/:id', async (req, res) => {
         const directImgUrl = `${connResponse.data.baseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
         const tunnelImgSrc = `/image-stream?url=${encodeURIComponent(directImgUrl)}&backup=${encodeURIComponent(`https://uploads.mangadex.org/${folder}/${hash}/${pageArray[pageIndex]}`)}`;
 
-        // Navigation strings 
+        // Dynamic target values for zooming
+        const stepUpZoom = currentZoom + 70;
+        const stepDownZoom = currentZoom > 100 ? currentZoom - 70 : 100;
+
+        // Interactive URL triggers
+        const zoomInUrl = `/chapter/${req.params.id}?p=${pageIndex}&z=${stepUpZoom}`;
+        const zoomOutUrl = `/chapter/${req.params.id}?p=${pageIndex}&z=${stepDownZoom}`;
+
         const nextLink = pageIndex < pageArray.length - 1 
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}&z=${currentZoom}" style="color:#4ade80; font-size:18px; font-weight:bold; display:block; padding:10px; background:#1e293b; margin:8px 0; border:1px solid #475569;">NEXT PAGE -></a>` 
+            ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}&z=${currentZoom}" style="color:#4ade80; font-size:18px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:10px 0; border:1px solid #475569;">NEXT PAGE -></a>` 
             : '<span style="color:#94a3b8; display:block; margin:8px 0;">End of Chapter</span>';
             
         const prevLink = pageIndex > 0  
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}&z=${currentZoom}" style="color:#f97316;"><- Prev Page</a>` 
+            ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}&z=${currentZoom}" style="color:#f97316; display:inline-block; margin-top:8px;"><- Prev Page</a>` 
             : '';
-
-        // Calculate steps for keypad adjustments
-        const zoomInVal = currentZoom + 75;
-        const zoomOutVal = currentZoom > 100 ? currentZoom - 75 : 100;
 
         res.send(`
             <html>
@@ -202,25 +208,29 @@ app.get('/chapter/:id', async (req, res) => {
                 ${UI_STYLE}
             </head>
             <body style="text-align:center;">
-                <div style="font-size:12px; color:#94a3b8; padding:2px;">Page ${pageIndex + 1} / ${pageArray.length} (${currentZoom}%)</div>
+                <div style="font-size:12px; color:#94a3b8; padding:3px;">Page ${pageIndex + 1} / ${pageArray.length} [Size: ${currentZoom}%]</div>
                 
-                <div style="display:none;">
-                    <a href="/chapter/${req.params.id}?p=${pageIndex}&z=${zoomInVal}" accesskey="5">Zoom In</a>
-                    <a href="/chapter/${req.params.id}?p=${pageIndex}&z=${zoomOutVal}" accesskey="6">Zoom Out</a>
+                <div style="margin: 5px 0;">
+                    <a class="zoom-control-btn" href="${zoomInUrl}">[+] Zoom In</a>
+                    <a class="zoom-control-btn" href="${zoomOutUrl}">[-] Zoom Out</a>
                 </div>
-
-                <div class="key-hint">Press <b>5</b> to Zoom In | Press <b>6</b> to Zoom Out</div>
 
                 <div class="scroll-container">
-                    <img src="${tunnelImgSrc}" style="width:${currentZoom}%; max-width:none; height:auto; display:block; margin:0 auto;" alt="Manga Page" />
+                    <a class="img-link" href="${zoomInUrl}">
+                        <img src="${tunnelImgSrc}" style="width:${currentZoom}%; max-width:none; height:auto; display:block; margin:0 auto;" alt="Manga Content (Click to Zoom In)" />
+                    </a>
                 </div>
 
-                <div style="margin:10px 0;">
+                <div style="margin: 5px 0;">
+                    <a class="zoom-control-btn" href="${zoomInUrl}">[+] Zoom In Again</a>
+                </div>
+
+                <div style="margin:12px 0;">
                     ${nextLink}
                     ${prevLink}
                 </div>
                 <hr style="border-color:#334155;"/>
-                <a href="/" style="color:#ef4444;">Exit</a>
+                <a href="/" style="color:#ef4444; font-weight:bold;">Exit Reader</a>
             </body>
             </html>
         `);
@@ -248,4 +258,4 @@ app.get('/image-stream', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`Keypad core operational on ${PORT}`));
+app.listen(PORT, () => console.log(`D-Pad interactive stream tracking server live on ${PORT}`));
