@@ -5,7 +5,6 @@ const PORT = process.env.PORT || 3000;
 
 const MANGADEX_API = 'https://api.mangadex.org';
 
-// Exact Genre Tag Mapping matching MangaDex UUID specifications
 const GENRES = {
     "All": "",
     "Action": "391b0423-d847-456f-aff0-8b0cfc03066b",
@@ -16,7 +15,6 @@ const GENRES = {
     "Adult Content": "97893a4c-12af-4dac-b6be-5257f1856150"
 };
 
-// Clean UI theme that processes natively in Opera Mini
 const UI_STYLE = `
     <style>
         body { background: #0b0f19; color: #f3f4f6; font-family: monospace; padding: 8px; margin: 0; }
@@ -31,7 +29,7 @@ const UI_STYLE = `
     </style>
 `;
 
-// 1. Home / Feed Module
+// 1. Home / Feed Route
 app.get('/', async (req, res) => {
     const page = parseInt(req.query.page) || 0;
     const selectedGenre = req.query.genre || "";
@@ -189,15 +187,15 @@ app.get('/manga/:id', async (req, res) => {
     }
 });
 
-// 4. Chapter Viewer & Base64 Converter Loop
+// 4. Chapter Viewer Module
 app.get('/chapter/:id', async (req, res) => {
     try {
         const pageIndex = parseInt(req.query.p) || 0;
 
-        // Uses the official At-Home image routing servers
         const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`);
         const hash = connResponse.data.chapter.hash;
         
+        // Auto fallback if dataSaver list is blank
         let pageArray = connResponse.data.chapter.dataSaver;
         let folder = 'data-saver';
         
@@ -206,18 +204,15 @@ app.get('/chapter/:id', async (req, res) => {
             folder = 'data';
         }
 
+        // Safety check to avoid blank loops
         if (pageIndex < 0 || pageIndex >= pageArray.length) {
             return res.send(`<html><head>${UI_STYLE}</head><body><h3>Chapter Complete</h3><a href="/">Home</a></body></html>`);
         }
 
         const directImgUrl = `${connResponse.data.baseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
-
-        // Fetch image stream on Render machine context directly
-        const imgBufferResponse = await axios.get(directImgUrl, { responseType: 'arraybuffer' });
         
-        // Encode payload directly to unblockable inline inline source
-        const base64Image = Buffer.from(imgBufferResponse.data, 'binary').toString('base64');
-        const embeddedImgSrc = `data:image/jpeg;base64,${base64Image}`;
+        // Dynamic Binary Image Stream Tunnel URL
+        const tunnelImgSrc = `/image-stream?url=${encodeURIComponent(directImgUrl)}`;
 
         const nextLink = pageIndex < pageArray.length - 1 
             ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}" style="color:#4ade80; font-size:20px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:10px 0; border:1px solid #475569;">NEXT PAGE -></a>` 
@@ -237,7 +232,7 @@ app.get('/chapter/:id', async (req, res) => {
                 <div style="padding:5px; background:#1e293b; font-size:13px; color:#94a3b8;">Page ${pageIndex + 1} / ${pageArray.length}</div>
                 
                 <div style="margin: 10px 0;">
-                    <img src="${embeddedImgSrc}" style="width:100%; max-width:320px; height:auto; border:1px solid #334155;" alt="Manga Page Parsing Error" />
+                    <img src="${tunnelImgSrc}" style="width:100%; max-width:320px; height:auto; border:1px solid #334155;" alt="Loading Page..." />
                 </div>
 
                 <div style="margin:15px 0;">
@@ -251,8 +246,28 @@ app.get('/chapter/:id', async (req, res) => {
             </html>
         `);
     } catch (err) {
-        res.send(`<html><head>${UI_STYLE}</head><body><h3>Image Pipeline Timeout</h3><p>Could not compile inline image string. Try reloading.</p><a href="javascript:location.reload()">Reload Page</a></body></html>`);
+        res.send(`<html><head>${UI_STYLE}</head><body><h3>Chapter Loading Error</h3><p>Could not reach image data server tracks. Try refreshing.</p><a href="javascript:location.reload()">Reload Page</a></body></html>`);
     }
 });
 
-app.listen(PORT, () => console.log(`Base64 system online on port ${PORT}`));
+// 5. Secure Low-RAM Pass-Through Stream Proxy
+app.get('/image-stream', async (req, res) => {
+    const targetUrl = req.query.url;
+    if (!targetUrl) return res.status(400).send("No target URL provided.");
+
+    try {
+        const streamResponse = await axios({
+            method: 'get',
+            url: targetUrl,
+            responseType: 'stream'
+        });
+
+        // Tell your phone's browser to read this directly as a normal picture stream chunk
+        res.setHeader('Content-Type', 'image/jpeg');
+        streamResponse.data.pipe(res);
+    } catch (err) {
+        res.status(500).send("Error proxying chunk image data.");
+    }
+});
+
+app.listen(PORT, () => console.log(`Streaming proxy core live on port ${PORT}`));
