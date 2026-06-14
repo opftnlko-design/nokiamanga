@@ -25,13 +25,12 @@ const UI_STYLE = `
         ul { padding-left: 12px; margin: 8px 0; }
         li { margin-bottom: 10px; }
         .btn-green { background: #16a34a; color: #fff; padding: 6px; font-weight: bold; display: inline-block; border-radius: 2px; margin-right: 4px; text-decoration: none; }
-        .btn-orange { background: #ea580c; color: #fff; padding: 6px; font-weight: bold; display: inline-block; border-radius: 2px; text-decoration: none; }
         
-        /* Interactive Zoom Buttons Style */
-        .zoom-control-btn { display: inline-block; background: #2563eb; color: #ffffff; padding: 6px 12px; font-weight: bold; font-size: 13px; border: 1px solid #3b82f6; border-radius: 3px; text-decoration: none; margin: 3px; }
+        /* Interactive D-Pad Zoom Controls */
+        .zoom-control-btn { display: inline-block; background: #2563eb; color: #ffffff; padding: 8px 14px; font-weight: bold; font-size: 14px; border: 1px solid #3b82f6; border-radius: 4px; text-decoration: none; margin: 4px; }
         .zoom-control-btn:focus { background: #eab308; color: #000000; border-color: #ffffff; }
         
-        .scroll-container { width: 100%; overflow-x: auto; overflow-y: hidden; background: #000; border-top: 1px solid #334155; border-bottom: 1px solid #334155; text-align: left; }
+        .scroll-container { width: 100%; overflow-x: auto; overflow-y: hidden; background: #000; border-top: 2px solid #334155; border-bottom: 2px solid #334155; text-align: left; }
         .img-link { display: block; border: none; text-decoration: none; padding: 0; margin: 0; }
     </style>
 `;
@@ -79,7 +78,7 @@ app.get('/', async (req, res) => {
         <html>
         <head><meta name="viewport" content="width=device-width, initial-scale=1.0">${UI_STYLE}</head>
         <body>
-            <h3 style="color:#2563eb; margin:4px 0;">Nokia Manga Pro</h3>
+            <h3 style="color:#2563eb; margin:4px 0;">Nokia Manga Pro v3</h3>
             <form action="/search" method="GET">
                 <input type="text" name="title" placeholder="Search..." required />
                 <button type="submit">Go</button>
@@ -161,21 +160,22 @@ app.get('/manga/:id', async (req, res) => {
     }
 });
 
-// 4. Chapter Viewer (Fixed Native Selectable Target Engine)
+// 4. Chapter Viewer (Forced High-Definition Original Track Engine)
 app.get('/chapter/:id', async (req, res) => {
     try {
         const pageIndex = parseInt(req.query.p) || 0;
-        const currentZoom = parseInt(req.query.z) || 100; // Track screen multiplier integer percentage
+        const currentZoom = parseInt(req.query.z) || 100; 
 
         const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`, { timeout: 8000 });
         const hash = connResponse.data.chapter.hash;
         
-        let pageArray = connResponse.data.chapter.dataSaver;
-        let folder = 'data-saver';
+        // FIX: Replaced compressed 'dataSaver' with 'data' to force uncompressed source files
+        let pageArray = connResponse.data.chapter.data;
+        let folder = 'data';
         
         if (!pageArray || pageArray.length === 0) {
-            pageArray = connResponse.data.chapter.data;
-            folder = 'data';
+            pageArray = connResponse.data.chapter.dataSaver;
+            folder = 'data-saver';
         }
 
         if (pageIndex < 0 || pageIndex >= pageArray.length) {
@@ -185,11 +185,10 @@ app.get('/chapter/:id', async (req, res) => {
         const directImgUrl = `${connResponse.data.baseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
         const tunnelImgSrc = `/image-stream?url=${encodeURIComponent(directImgUrl)}&backup=${encodeURIComponent(`https://uploads.mangadex.org/${folder}/${hash}/${pageArray[pageIndex]}`)}`;
 
-        // Dynamic target values for zooming
-        const stepUpZoom = currentZoom + 70;
-        const stepDownZoom = currentZoom > 100 ? currentZoom - 70 : 100;
+        // Controlled 50% steps for cleaner scaling on lower resolution hardware
+        const stepUpZoom = currentZoom + 50;
+        const stepDownZoom = currentZoom > 100 ? currentZoom - 50 : 100;
 
-        // Interactive URL triggers
         const zoomInUrl = `/chapter/${req.params.id}?p=${pageIndex}&z=${stepUpZoom}`;
         const zoomOutUrl = `/chapter/${req.params.id}?p=${pageIndex}&z=${stepDownZoom}`;
 
@@ -208,7 +207,7 @@ app.get('/chapter/:id', async (req, res) => {
                 ${UI_STYLE}
             </head>
             <body style="text-align:center;">
-                <div style="font-size:12px; color:#94a3b8; padding:3px;">Page ${pageIndex + 1} / ${pageArray.length} [Size: ${currentZoom}%]</div>
+                <div style="font-size:12px; color:#94a3b8; padding:3px;">Page ${pageIndex + 1} / ${pageArray.length} [HD Scale: ${currentZoom}%]</div>
                 
                 <div style="margin: 5px 0;">
                     <a class="zoom-control-btn" href="${zoomInUrl}">[+] Zoom In</a>
@@ -217,12 +216,8 @@ app.get('/chapter/:id', async (req, res) => {
 
                 <div class="scroll-container">
                     <a class="img-link" href="${zoomInUrl}">
-                        <img src="${tunnelImgSrc}" style="width:${currentZoom}%; max-width:none; height:auto; display:block; margin:0 auto;" alt="Manga Content (Click to Zoom In)" />
+                        <img src="${tunnelImgSrc}" style="width:${currentZoom}%; max-width:none; height:auto; display:block; margin:0 auto;" alt="Manga HD View" />
                     </a>
-                </div>
-
-                <div style="margin: 5px 0;">
-                    <a class="zoom-control-btn" href="${zoomInUrl}">[+] Zoom In Again</a>
                 </div>
 
                 <div style="margin:12px 0;">
@@ -235,7 +230,7 @@ app.get('/chapter/:id', async (req, res) => {
             </html>
         `);
     } catch (err) {
-        res.send(`<html><head>${UI_STYLE}</head><body><h3>Timeout Error</h3><a href="javascript:location.reload()">Retry</a></body></html>`);
+        res.send(`<html><head>${UI_STYLE}</head><body><h3>HD Pipeline Error</h3><a href="javascript:location.reload()">Retry</a></body></html>`);
     }
 });
 
@@ -244,12 +239,12 @@ app.get('/image-stream', async (req, res) => {
     const targetUrl = req.query.url;
     const backupUrl = req.query.backup;
     try {
-        const streamResponse = await axios({ method: 'get', url: targetUrl, responseType: 'stream', timeout: 5000 });
+        const streamResponse = await axios({ method: 'get', url: targetUrl, responseType: 'stream', timeout: 7000 });
         res.setHeader('Content-Type', 'image/jpeg');
         return streamResponse.data.pipe(res);
     } catch (err) {
         try {
-            const backupResponse = await axios({ method: 'get', url: backupUrl, responseType: 'stream', timeout: 6000 });
+            const backupResponse = await axios({ method: 'get', url: backupUrl, responseType: 'stream', timeout: 8000 });
             res.setHeader('Content-Type', 'image/jpeg');
             return backupResponse.data.pipe(res);
         } catch (bErr) {
@@ -258,4 +253,4 @@ app.get('/image-stream', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`D-Pad interactive stream tracking server live on ${PORT}`));
+app.listen(PORT, () => console.log(`HD Engine online on port ${PORT}`));
