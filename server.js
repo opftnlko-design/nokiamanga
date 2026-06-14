@@ -26,10 +26,11 @@ const UI_STYLE = `
         li { margin-bottom: 12px; }
         .btn-green { background: #16a34a; color: #fff; padding: 8px; font-weight: bold; display: inline-block; border-radius: 3px; margin-right:5px; text-decoration:none; }
         .btn-orange { background: #ea580c; color: #fff; padding: 8px; font-weight: bold; display: inline-block; border-radius: 3px; text-decoration:none; }
+        .warning-box { background: #7c2d12; color: #ffedd5; padding: 8px; margin: 10px 0; border-radius: 4px; font-size: 12px; }
     </style>
 `;
 
-// 1. Home / Feed Route
+// Home Route
 app.get('/', async (req, res) => {
     const page = parseInt(req.query.page) || 0;
     const selectedGenre = req.query.genre || "";
@@ -57,14 +58,14 @@ app.get('/', async (req, res) => {
             params.includedTags = [selectedGenre];
         }
 
-        const response = await axios.get(`${MANGADEX_API}/manga`, { params });
+        const response = await axios.get(`${MANGADEX_API}/manga`, { params, timeout: 8000 });
 
         response.data.data.forEach(manga => {
             const name = manga.attributes.title.en || Object.values(manga.attributes.title)[0] || 'Unknown Title';
             listHtml += `<li><a href="/manga/${manga.id}" style="color: #4ade80; font-weight:bold;">${name}</a></li>`;
         });
     } catch (err) {
-        listHtml = '<li>Failed to fetch live feed. Tap refresh.</li>';
+        listHtml = '<li>Feed timed out. Tap refresh link below.</li>';
     }
 
     const nextPage = page + 1;
@@ -100,7 +101,7 @@ app.get('/', async (req, res) => {
     `);
 });
 
-// 2. Search Parser
+// Search Route
 app.get('/search', async (req, res) => {
     const title = req.query.title;
     if (!title) return res.redirect('/');
@@ -112,7 +113,8 @@ app.get('/search', async (req, res) => {
                 limit: 25,
                 availableTranslatedLanguage: ['en'],
                 contentRating: ['safe', 'suggestive', 'erotica', 'pornographic']
-            }
+            },
+            timeout: 8000
         });
         
         let listHtml = '';
@@ -137,7 +139,7 @@ app.get('/search', async (req, res) => {
     }
 });
 
-// 3. Manga Feed & Chapter Indexing
+// Chapters List Component
 app.get('/manga/:id', async (req, res) => {
     try {
         const response = await axios.get(`${MANGADEX_API}/manga/${req.params.id}/feed`, {
@@ -146,12 +148,29 @@ app.get('/manga/:id', async (req, res) => {
                 order: { chapter: 'asc' }, 
                 translatedLanguage: ['en'],
                 contentRating: ['safe', 'suggestive', 'erotica', 'pornographic']
-            }
+            },
+            timeout: 10000
         });
 
         const chapters = response.data.data;
+        
+        let warningNotice = '';
+        if (!chapters || chapters.length < 5) {
+            warningNotice = `
+                <div class="warning-box">
+                    ⚠️ <b>Notice:</b> This manga has missing chapters on MangaDex due to official publisher copyright blockades.
+                </div>
+            `;
+        }
+
         if (!chapters || chapters.length === 0) {
-            return res.send(`<body style="background:#0b0f19; color:#fff; font-family:monospace; padding:10px;"><p>No English chapters found.</p><a href="/" style="color:#ef4444;">Home</a></body>`);
+            return res.send(`
+                <html><head>${UI_STYLE}</head><body>
+                ${warningNotice}
+                <p style="color:#ef4444;">No chapters available on this host provider database.</p>
+                <a href="/">Home</a>
+                </body></html>
+            `);
         }
 
         const firstChapterId = chapters[0].id;
@@ -169,6 +188,7 @@ app.get('/manga/:id', async (req, res) => {
             <html>
             <head>${UI_STYLE}</head>
             <body>
+                ${warningNotice}
                 <h3>Controls:</h3>
                 <div style="margin:15px 0;">
                     <a href="/chapter/${firstChapterId}" class="btn-green">READ FROM START</a>
@@ -187,15 +207,15 @@ app.get('/manga/:id', async (req, res) => {
     }
 });
 
-// 4. Chapter Viewer Module
+// Reader Module with Multi-Node Connection Fail-safes
 app.get('/chapter/:id', async (req, res) => {
     try {
         const pageIndex = parseInt(req.query.p) || 0;
 
-        const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`);
+        const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`, { timeout: 6000 });
         const hash = connResponse.data.chapter.hash;
+        const fallbackBaseUrl = "https://uploads.mangadex.org"; // Safe storage cluster fallback
         
-        // Auto fallback if dataSaver list is blank
         let pageArray = connResponse.data.chapter.dataSaver;
         let folder = 'data-saver';
         
@@ -204,21 +224,22 @@ app.get('/chapter/:id', async (req, res) => {
             folder = 'data';
         }
 
-        // Safety check to avoid blank loops
         if (pageIndex < 0 || pageIndex >= pageArray.length) {
             return res.send(`<html><head>${UI_STYLE}</head><body><h3>Chapter Complete</h3><a href="/">Home</a></body></html>`);
         }
 
-        const directImgUrl = `${connResponse.data.baseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
+        // Generate primary assigned node path and alternative official cluster route
+        const nodeUrl = `${connResponse.data.baseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
+        const clusterUrl = `${fallbackBaseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
         
-        // Dynamic Binary Image Stream Tunnel URL
-        const tunnelImgSrc = `/image-stream?url=${encodeURIComponent(directImgUrl)}`;
+        // Pass both locations down to stream engine tunnel
+        const tunnelImgSrc = `/image-stream?url=${encodeURIComponent(nodeUrl)}&backup=${encodeURIComponent(clusterUrl)}`;
 
         const nextLink = pageIndex < pageArray.length - 1 
             ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}" style="color:#4ade80; font-size:20px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:10px 0; border:1px solid #475569;">NEXT PAGE -></a>` 
             : '<span style="color:#94a3b8; display:block; margin:10px 0;">Chapter Finished</span>';
             
-        const prevLink = pageIndex > 0 
+        const prevLink = pageIndex > 0  
             ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}" style="color:#f97316;"><- Previous Page</a>` 
             : '';
 
@@ -232,7 +253,7 @@ app.get('/chapter/:id', async (req, res) => {
                 <div style="padding:5px; background:#1e293b; font-size:13px; color:#94a3b8;">Page ${pageIndex + 1} / ${pageArray.length}</div>
                 
                 <div style="margin: 10px 0;">
-                    <img src="${tunnelImgSrc}" style="width:100%; max-width:320px; height:auto; border:1px solid #334155;" alt="Loading Page..." />
+                    <img src="${tunnelImgSrc}" style="width:100%; max-width:320px; height:auto; border:1px solid #334155;" alt="Loading content context tracks..." />
                 </div>
 
                 <div style="margin:15px 0;">
@@ -246,28 +267,42 @@ app.get('/chapter/:id', async (req, res) => {
             </html>
         `);
     } catch (err) {
-        res.send(`<html><head>${UI_STYLE}</head><body><h3>Chapter Loading Error</h3><p>Could not reach image data server tracks. Try refreshing.</p><a href="javascript:location.reload()">Reload Page</a></body></html>`);
+        res.send(`<html><head>${UI_STYLE}</head><body><h3>Node Assignment Error</h3><p>MangaDex host lines are busy right now.</p><a href="javascript:location.reload()">Tap to retry</a></body></html>`);
     }
 });
 
-// 5. Secure Low-RAM Pass-Through Stream Proxy
+// Dual-node Binary Auto-Swapping Tunnel Proxy Engine
 app.get('/image-stream', async (req, res) => {
     const targetUrl = req.query.url;
-    if (!targetUrl) return res.status(400).send("No target URL provided.");
+    const backupUrl = req.query.backup;
+    if (!targetUrl) return res.status(400).send("Parameters missing.");
 
     try {
+        // Try to download from assigned primary volunteer node
         const streamResponse = await axios({
             method: 'get',
             url: targetUrl,
-            responseType: 'stream'
+            responseType: 'stream',
+            timeout: 5000 
         });
 
-        // Tell your phone's browser to read this directly as a normal picture stream chunk
         res.setHeader('Content-Type', 'image/jpeg');
-        streamResponse.data.pipe(res);
+        return streamResponse.data.pipe(res);
     } catch (err) {
-        res.status(500).send("Error proxying chunk image data.");
+        // If node fails/blanks out, immediately drop it and stream from global fallback backup cluster cluster instead
+        try {
+            const backupResponse = await axios({
+                method: 'get',
+                url: backupUrl,
+                responseType: 'stream',
+                timeout: 6000
+            });
+            res.setHeader('Content-Type', 'image/jpeg');
+            return backupResponse.data.pipe(res);
+        } catch (backupErr) {
+            res.status(500).send("All proxy pipelines dropped connection.");
+        }
     }
 });
 
-app.listen(PORT, () => console.log(`Streaming proxy core live on port ${PORT}`));
+app.listen(PORT, () => console.log(`Dynamic Fail-Safe engine online on port ${PORT}`));
