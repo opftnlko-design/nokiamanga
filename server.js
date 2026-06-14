@@ -5,7 +5,7 @@ const PORT = process.env.PORT || 3000;
 
 const MANGADEX_API = 'https://api.mangadex.org';
 
-// Genre Tag Mapping for Filtering
+// Exact Genre Tag Mapping matching MangaDex UUID specifications
 const GENRES = {
     "All": "",
     "Action": "391b0423-d847-456f-aff0-8b0cfc03066b",
@@ -16,6 +16,7 @@ const GENRES = {
     "Adult Content": "97893a4c-12af-4dac-b6be-5257f1856150"
 };
 
+// Clean UI theme that processes natively in Opera Mini
 const UI_STYLE = `
     <style>
         body { background: #0b0f19; color: #f3f4f6; font-family: monospace; padding: 8px; margin: 0; }
@@ -25,12 +26,12 @@ const UI_STYLE = `
         .genre-link { display: inline-block; background: #334155; color: #fff; padding: 4px 8px; margin: 3px; border-radius: 3px; font-size: 12px; }
         ul { padding-left: 15px; margin: 10px 0; }
         li { margin-bottom: 12px; }
-        .btn-green { background: #16a34a; color: #fff; padding: 8px; font-weight: bold; display: inline-block; border-radius: 3px; margin-right:5px;}
-        .btn-orange { background: #ea580c; color: #fff; padding: 8px; font-weight: bold; display: inline-block; border-radius: 3px; }
+        .btn-green { background: #16a34a; color: #fff; padding: 8px; font-weight: bold; display: inline-block; border-radius: 3px; margin-right:5px; text-decoration:none; }
+        .btn-orange { background: #ea580c; color: #fff; padding: 8px; font-weight: bold; display: inline-block; border-radius: 3px; text-decoration:none; }
     </style>
 `;
 
-// Home Screen Routing
+// 1. Home / Feed Module
 app.get('/', async (req, res) => {
     const page = parseInt(req.query.page) || 0;
     const selectedGenre = req.query.genre || "";
@@ -65,7 +66,7 @@ app.get('/', async (req, res) => {
             listHtml += `<li><a href="/manga/${manga.id}" style="color: #4ade80; font-weight:bold;">${name}</a></li>`;
         });
     } catch (err) {
-        listHtml = '<li>Failed to fetch data stream from indexing engine.</li>';
+        listHtml = '<li>Failed to fetch live feed. Tap refresh.</li>';
     }
 
     const nextPage = page + 1;
@@ -78,7 +79,7 @@ app.get('/', async (req, res) => {
             ${UI_STYLE}
         </head>
         <body>
-            <h2 style="color:#2563eb; margin:5px 0;">Nokia Manga Pro v3</h2>
+            <h2 style="color:#2563eb; margin:5px 0;">Nokia Manga Pro</h2>
             
             <form action="/search" method="GET">
                 <input type="text" name="title" placeholder="Search title..." required />
@@ -101,7 +102,7 @@ app.get('/', async (req, res) => {
     `);
 });
 
-// Search Route Engine (Enforces English & Adult configurations)
+// 2. Search Parser
 app.get('/search', async (req, res) => {
     const title = req.query.title;
     if (!title) return res.redirect('/');
@@ -138,7 +139,7 @@ app.get('/search', async (req, res) => {
     }
 });
 
-// Info & Chapters List Node
+// 3. Manga Feed & Chapter Indexing
 app.get('/manga/:id', async (req, res) => {
     try {
         const response = await axios.get(`${MANGADEX_API}/manga/${req.params.id}/feed`, {
@@ -152,7 +153,7 @@ app.get('/manga/:id', async (req, res) => {
 
         const chapters = response.data.data;
         if (!chapters || chapters.length === 0) {
-            return res.send(`<body style="background:#0b0f19; color:#fff;"><p>No English chapters found for this title.</p><a href="/">Home</a></body>`);
+            return res.send(`<body style="background:#0b0f19; color:#fff; font-family:monospace; padding:10px;"><p>No English chapters found.</p><a href="/" style="color:#ef4444;">Home</a></body>`);
         }
 
         const firstChapterId = chapters[0].id;
@@ -171,7 +172,7 @@ app.get('/manga/:id', async (req, res) => {
             <head>${UI_STYLE}</head>
             <body>
                 <h3>Controls:</h3>
-                <div style="margin:10px 0;">
+                <div style="margin:15px 0;">
                     <a href="/chapter/${firstChapterId}" class="btn-green">READ FROM START</a>
                     <a href="/chapter/${lastChapterId}" class="btn-orange">READ FROM END</a>
                 </div>
@@ -188,11 +189,12 @@ app.get('/manga/:id', async (req, res) => {
     }
 });
 
-// Chapter Viewer Page (Converts Target Image directly to Base64 Text String Stream)
+// 4. Chapter Viewer & Base64 Converter Loop
 app.get('/chapter/:id', async (req, res) => {
     try {
         const pageIndex = parseInt(req.query.p) || 0;
 
+        // Uses the official At-Home image routing servers
         const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`);
         const hash = connResponse.data.chapter.hash;
         
@@ -210,10 +212,10 @@ app.get('/chapter/:id', async (req, res) => {
 
         const directImgUrl = `${connResponse.data.baseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
 
-        // 1. Force the Render Server to download the raw image byte buffer
+        // Fetch image stream on Render machine context directly
         const imgBufferResponse = await axios.get(directImgUrl, { responseType: 'arraybuffer' });
         
-        // 2. Convert the byte image buffer directly into a local inline text string base64 array
+        // Encode payload directly to unblockable inline inline source
         const base64Image = Buffer.from(imgBufferResponse.data, 'binary').toString('base64');
         const embeddedImgSrc = `data:image/jpeg;base64,${base64Image}`;
 
