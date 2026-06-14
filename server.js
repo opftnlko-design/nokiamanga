@@ -5,6 +5,7 @@ const PORT = process.env.PORT || 3000;
 
 const MANGADEX_API = 'https://api.mangadex.org';
 
+// Genre Tag Mapping matching MangaDex UUID specifications
 const GENRES = {
     "All": "",
     "Action": "391b0423-d847-456f-aff0-8b0cfc03066b",
@@ -15,6 +16,7 @@ const GENRES = {
     "Adult Content": "97893a4c-12af-4dac-b6be-5257f1856150"
 };
 
+// Lightweight CSS optimized for performance on Opera Mini and Nokia devices
 const UI_STYLE = `
     <style>
         body { background: #0b0f19; color: #f3f4f6; font-family: monospace; padding: 8px; margin: 0; }
@@ -26,11 +28,14 @@ const UI_STYLE = `
         li { margin-bottom: 12px; }
         .btn-green { background: #16a34a; color: #fff; padding: 8px; font-weight: bold; display: inline-block; border-radius: 3px; margin-right:5px; text-decoration:none; }
         .btn-orange { background: #ea580c; color: #fff; padding: 8px; font-weight: bold; display: inline-block; border-radius: 3px; text-decoration:none; }
-        .warning-box { background: #7c2d12; color: #ffedd5; padding: 8px; margin: 10px 0; border-radius: 4px; font-size: 12px; }
+        .warning-box { background: #7c2d12; color: #ffedd5; padding: 8px; margin: 10px 0; border-radius: 4px; font-size: 12px; text-align: left; }
+        .zoom-btn { display:inline-block; padding:6px 12px; background:#334155; color:#fff; border-radius:3px; margin:2px; font-size:12px; text-decoration:none; }
+        .active-zoom { background:#2563eb; font-weight:bold; border: 1px solid #fff; }
+        .scroll-container { width:100%; overflow-x:auto; overflow-y:hidden; border:1px solid #334155; background:#000; margin:10px 0; text-align:left; }
     </style>
 `;
 
-// Home Route
+// 1. Home / Feed Route
 app.get('/', async (req, res) => {
     const page = parseInt(req.query.page) || 0;
     const selectedGenre = req.query.genre || "";
@@ -65,7 +70,7 @@ app.get('/', async (req, res) => {
             listHtml += `<li><a href="/manga/${manga.id}" style="color: #4ade80; font-weight:bold;">${name}</a></li>`;
         });
     } catch (err) {
-        listHtml = '<li>Feed timed out. Tap refresh link below.</li>';
+        listHtml = '<li>Failed to fetch live feed. Tap refresh link below.</li>';
     }
 
     const nextPage = page + 1;
@@ -101,7 +106,7 @@ app.get('/', async (req, res) => {
     `);
 });
 
-// Search Route
+// 2. Search Parser Route
 app.get('/search', async (req, res) => {
     const title = req.query.title;
     if (!title) return res.redirect('/');
@@ -139,7 +144,7 @@ app.get('/search', async (req, res) => {
     }
 });
 
-// Chapters List Component
+// 3. Manga Chapter Feed List
 app.get('/manga/:id', async (req, res) => {
     try {
         const response = await axios.get(`${MANGADEX_API}/manga/${req.params.id}/feed`, {
@@ -158,7 +163,7 @@ app.get('/manga/:id', async (req, res) => {
         if (!chapters || chapters.length < 5) {
             warningNotice = `
                 <div class="warning-box">
-                    ⚠️ <b>Notice:</b> This manga has missing chapters on MangaDex due to official publisher copyright blockades.
+                    ⚠️ <b>Notice:</b> Some chapters may be unavailable on MangaDex due to publisher copyright blockades.
                 </div>
             `;
         }
@@ -167,7 +172,7 @@ app.get('/manga/:id', async (req, res) => {
             return res.send(`
                 <html><head>${UI_STYLE}</head><body>
                 ${warningNotice}
-                <p style="color:#ef4444;">No chapters available on this host provider database.</p>
+                <p style="color:#ef4444;">No readable English scanlations found in this database repository.</p>
                 <a href="/">Home</a>
                 </body></html>
             `);
@@ -207,14 +212,15 @@ app.get('/manga/:id', async (req, res) => {
     }
 });
 
-// Reader Module with Multi-Node Connection Fail-safes
+// 4. Chapter Viewer Route with Built-in Zoom Controls
 app.get('/chapter/:id', async (req, res) => {
     try {
         const pageIndex = parseInt(req.query.p) || 0;
+        const zoom = req.query.z || "100"; // Read current zoom multiplier string
 
-        const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`, { timeout: 6000 });
+        const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`, { timeout: 8000 });
         const hash = connResponse.data.chapter.hash;
-        const fallbackBaseUrl = "https://uploads.mangadex.org"; // Safe storage cluster fallback
+        const fallbackBaseUrl = "https://uploads.mangadex.org";
         
         let pageArray = connResponse.data.chapter.dataSaver;
         let folder = 'data-saver';
@@ -228,20 +234,24 @@ app.get('/chapter/:id', async (req, res) => {
             return res.send(`<html><head>${UI_STYLE}</head><body><h3>Chapter Complete</h3><a href="/">Home</a></body></html>`);
         }
 
-        // Generate primary assigned node path and alternative official cluster route
-        const nodeUrl = `${connResponse.data.baseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
-        const clusterUrl = `${fallbackBaseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
+        const directImgUrl = `${connResponse.data.baseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
+        const clusterBackupUrl = `${fallbackBaseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
         
-        // Pass both locations down to stream engine tunnel
-        const tunnelImgSrc = `/image-stream?url=${encodeURIComponent(nodeUrl)}&backup=${encodeURIComponent(clusterUrl)}`;
+        // Target dynamic bypass proxy route
+        const tunnelImgSrc = `/image-stream?url=${encodeURIComponent(directImgUrl)}&backup=${encodeURIComponent(clusterBackupUrl)}`;
 
         const nextLink = pageIndex < pageArray.length - 1 
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}" style="color:#4ade80; font-size:20px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:10px 0; border:1px solid #475569;">NEXT PAGE -></a>` 
+            ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}&z=${zoom}" style="color:#4ade80; font-size:20px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:10px 0; border:1px solid #475569; text-decoration:none;">NEXT PAGE -></a>` 
             : '<span style="color:#94a3b8; display:block; margin:10px 0;">Chapter Finished</span>';
             
         const prevLink = pageIndex > 0  
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}" style="color:#f97316;"><- Previous Page</a>` 
+            ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}&z=${zoom}" style="color:#f97316;"><- Previous Page</a>` 
             : '';
+
+        // Preserves page state when applying image transformations
+        const zoomOutHref = `/chapter/${req.params.id}?p=${pageIndex}&z=100`;
+        const zoomMedHref = `/chapter/${req.params.id}?p=${pageIndex}&z=175`;
+        const zoomMaxHref = `/chapter/${req.params.id}?p=${pageIndex}&z=250`;
 
         res.send(`
             <html>
@@ -252,8 +262,15 @@ app.get('/chapter/:id', async (req, res) => {
             <body style="text-align:center;">
                 <div style="padding:5px; background:#1e293b; font-size:13px; color:#94a3b8;">Page ${pageIndex + 1} / ${pageArray.length}</div>
                 
-                <div style="margin: 10px 0;">
-                    <img src="${tunnelImgSrc}" style="width:100%; max-width:320px; height:auto; border:1px solid #334155;" alt="Loading content context tracks..." />
+                <div style="margin:8px 0; background:#111827; padding:6px; border-radius:4px;">
+                    <span style="font-size:11px; color:#94a3b8; display:block; margin-bottom:4px;">Text size control:</span>
+                    <a class="zoom-btn ${zoom === '100' ? 'active-zoom' : ''}" href="${zoomOutHref}">Fit Screen</a>
+                    <a class="zoom-btn ${zoom === '175' ? 'active-zoom' : ''}" href="${zoomMedHref}">Medium Zoom</a>
+                    <a class="zoom-btn ${zoom === '250' ? 'active-zoom' : ''}" href="${zoomMaxHref}">Max Text</a>
+                </div>
+
+                <div class="scroll-container">
+                    <img src="${tunnelImgSrc}" style="width:${zoom}%; max-width:none; height:auto; display:block; margin:0 auto;" alt="Manga Page content..." />
                 </div>
 
                 <div style="margin:15px 0;">
@@ -267,29 +284,28 @@ app.get('/chapter/:id', async (req, res) => {
             </html>
         `);
     } catch (err) {
-        res.send(`<html><head>${UI_STYLE}</head><body><h3>Node Assignment Error</h3><p>MangaDex host lines are busy right now.</p><a href="javascript:location.reload()">Tap to retry</a></body></html>`);
+        res.send(`<html><head>${UI_STYLE}</head><body><h3>Image Pipeline Timeout</h3><p>MangaDex server lines are busy.</p><a href="javascript:location.reload()">Reload Page</a></body></html>`);
     }
 });
 
-// Dual-node Binary Auto-Swapping Tunnel Proxy Engine
+// 5. Secure Binary Pass-Through Stream Proxy (Low Memory Footprint)
 app.get('/image-stream', async (req, res) => {
     const targetUrl = req.query.url;
     const backupUrl = req.query.backup;
-    if (!targetUrl) return res.status(400).send("Parameters missing.");
+    if (!targetUrl) return res.status(400).send("No target URL provided.");
 
     try {
-        // Try to download from assigned primary volunteer node
         const streamResponse = await axios({
             method: 'get',
             url: targetUrl,
             responseType: 'stream',
-            timeout: 5000 
+            timeout: 5000
         });
 
         res.setHeader('Content-Type', 'image/jpeg');
         return streamResponse.data.pipe(res);
     } catch (err) {
-        // If node fails/blanks out, immediately drop it and stream from global fallback backup cluster cluster instead
+        // Drop bad node connection instantly and route through central data array fallback cluster
         try {
             const backupResponse = await axios({
                 method: 'get',
@@ -305,4 +321,4 @@ app.get('/image-stream', async (req, res) => {
     }
 });
 
-app.listen(PORT, () => console.log(`Dynamic Fail-Safe engine online on port ${PORT}`));
+app.listen(PORT, () => console.log(`Production engine streaming on port ${PORT}`));
