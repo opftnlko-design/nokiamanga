@@ -5,7 +5,6 @@ const PORT = process.env.PORT || 3000;
 
 const MANGADEX_API = 'https://api.mangadex.org';
 
-// Genre Tag Mapping matching MangaDex UUID specifications
 const GENRES = {
     "All": "",
     "Action": "391b0423-d847-456f-aff0-8b0cfc03066b",
@@ -16,26 +15,23 @@ const GENRES = {
     "Adult Content": "97893a4c-12af-4dac-b6be-5257f1856150"
 };
 
-// Lightweight CSS optimized for performance on Opera Mini and Nokia devices
 const UI_STYLE = `
     <style>
-        body { background: #0b0f19; color: #f3f4f6; font-family: monospace; padding: 8px; margin: 0; }
-        a { color: #38bdf8; text-decoration: none; font-size: 15px; }
-        input, button, select { padding: 8px; font-size: 14px; width: 100%; margin-bottom: 10px; background: #1e293b; color: #fff; border: 1px solid #475569; border-radius: 4px; box-sizing: border-box; }
+        body { background: #0b0f19; color: #f3f4f6; font-family: monospace; padding: 6px; margin: 0; }
+        a { color: #38bdf8; text-decoration: none; font-size: 14px; }
+        input, button { padding: 6px; font-size: 13px; width: 100%; margin-bottom: 8px; background: #1e293b; color: #fff; border: 1px solid #475569; border-radius: 3px; box-sizing: border-box; }
         button { background: #2563eb; font-weight: bold; border: none; }
-        .genre-link { display: inline-block; background: #334155; color: #fff; padding: 4px 8px; margin: 3px; border-radius: 3px; font-size: 12px; }
-        ul { padding-left: 15px; margin: 10px 0; }
-        li { margin-bottom: 12px; }
-        .btn-green { background: #16a34a; color: #fff; padding: 8px; font-weight: bold; display: inline-block; border-radius: 3px; margin-right:5px; text-decoration:none; }
-        .btn-orange { background: #ea580c; color: #fff; padding: 8px; font-weight: bold; display: inline-block; border-radius: 3px; text-decoration:none; }
-        .warning-box { background: #7c2d12; color: #ffedd5; padding: 8px; margin: 10px 0; border-radius: 4px; font-size: 12px; text-align: left; }
-        .zoom-btn { display:inline-block; padding:6px 12px; background:#334155; color:#fff; border-radius:3px; margin:2px; font-size:12px; text-decoration:none; }
-        .active-zoom { background:#2563eb; font-weight:bold; border: 1px solid #fff; }
-        .scroll-container { width:100%; overflow-x:auto; overflow-y:hidden; border:1px solid #334155; background:#000; margin:10px 0; text-align:left; }
+        .genre-link { display: inline-block; background: #334155; color: #fff; padding: 3px 6px; margin: 2px; border-radius: 2px; font-size: 11px; }
+        ul { padding-left: 12px; margin: 8px 0; }
+        li { margin-bottom: 10px; }
+        .btn-green { background: #16a34a; color: #fff; padding: 6px; font-weight: bold; display: inline-block; border-radius: 2px; margin-right: 4px; text-decoration: none; }
+        .btn-orange { background: #ea580c; color: #fff; padding: 6px; font-weight: bold; display: inline-block; border-radius: 2px; text-decoration: none; }
+        .scroll-container { width: 100%; overflow-x: auto; overflow-y: hidden; background: #000; border-top: 1px solid #334155; border-bottom: 1px solid #334155; text-align: left; }
+        .key-hint { font-size: 11px; color: #94a3b8; background: #111827; padding: 4px; margin: 4px 0; display: block; border-radius: 2px; }
     </style>
 `;
 
-// 1. Home / Feed Route
+// 1. Home Module
 app.get('/', async (req, res) => {
     const page = parseInt(req.query.page) || 0;
     const selectedGenre = req.query.genre || "";
@@ -59,9 +55,7 @@ app.get('/', async (req, res) => {
             contentRating: ['safe', 'suggestive', 'erotica', 'pornographic']
         };
 
-        if (selectedGenre) {
-            params.includedTags = [selectedGenre];
-        }
+        if (selectedGenre) params.includedTags = [selectedGenre];
 
         const response = await axios.get(`${MANGADEX_API}/manga`, { params, timeout: 8000 });
 
@@ -70,55 +64,41 @@ app.get('/', async (req, res) => {
             listHtml += `<li><a href="/manga/${manga.id}" style="color: #4ade80; font-weight:bold;">${name}</a></li>`;
         });
     } catch (err) {
-        listHtml = '<li>Failed to fetch live feed. Tap refresh link below.</li>';
+        listHtml = '<li>Failed to load feed. Refresh.</li>';
     }
 
     const nextPage = page + 1;
-    const prevPage = page > 0 ? `<a href="/?page=${page - 1}&genre=${selectedGenre}" style="color:#f97316;"><- Previous</a> | ` : '';
+    const prevPage = page > 0 ? `<a href="/?page=${page - 1}&genre=${selectedGenre}" style="color:#f97316;"><- Prev</a> | ` : '';
 
     res.send(`
         <html>
-        <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            ${UI_STYLE}
-        </head>
+        <head><meta name="viewport" content="width=device-width, initial-scale=1.0">${UI_STYLE}</head>
         <body>
-            <h2 style="color:#2563eb; margin:5px 0;">Nokia Manga Pro</h2>
-            
+            <h3 style="color:#2563eb; margin:4px 0;">Nokia Manga Pro</h3>
             <form action="/search" method="GET">
-                <input type="text" name="title" placeholder="Search title..." required />
-                <button type="submit">Search</button>
+                <input type="text" name="title" placeholder="Search..." required />
+                <button type="submit">Go</button>
             </form>
-            
-            <h4 style="margin:10px 0 5px 0;">Filters:</h4>
             ${genreFilterUi}
-            <hr style="border-color: #334155; margin: 15px 0;"/>
-            
-            <h3>Manga Feed:</h3>
+            <hr style="border-color: #334155; margin: 10px 0;"/>
             <ul>${listHtml}</ul>
-
-            <div style="margin: 20px 0; text-align: center;">
+            <div style="margin: 15px 0; text-align: center;">
                 ${prevPage}
-                <a href="/?page=${nextPage}&genre=${selectedGenre}" style="color:#38bdf8; font-weight:bold;">Load More -></a>
+                <a href="/?page=${nextPage}&genre=${selectedGenre}" style="color:#38bdf8; font-weight:bold;">Next -></a>
             </div>
         </body>
         </html>
     `);
 });
 
-// 2. Search Parser Route
+// 2. Search Parser
 app.get('/search', async (req, res) => {
     const title = req.query.title;
     if (!title) return res.redirect('/');
 
     try {
         const response = await axios.get(`${MANGADEX_API}/manga`, {
-            params: { 
-                title: title, 
-                limit: 25,
-                availableTranslatedLanguage: ['en'],
-                contentRating: ['safe', 'suggestive', 'erotica', 'pornographic']
-            },
+            params: { title: title, limit: 25, availableTranslatedLanguage: ['en'], contentRating: ['safe', 'suggestive', 'erotica', 'pornographic'] },
             timeout: 8000
         });
         
@@ -129,57 +109,29 @@ app.get('/search', async (req, res) => {
         });
 
         res.send(`
-            <html>
-            <head>${UI_STYLE}</head>
-            <body>
-                <h3>Results for "${title}":</h3>
+            <html><head>${UI_STYLE}</head><body>
+                <h3>Results:</h3>
                 <ul>${listHtml || '<li>No results found.</li>'}</ul>
-                <br/>
-                <a href="/" style="color:#ef4444;"><- Home</a>
-            </body>
-            </html>
+                <br/><a href="/" style="color:#ef4444;"><- Home</a>
+            </body></html>
         `);
     } catch (err) {
-        res.status(500).send("Search parsing failed.");
+        res.status(500).send("Search failed.");
     }
 });
 
-// 3. Manga Chapter Feed List
+// 3. Manga Feed & Chapter List
 app.get('/manga/:id', async (req, res) => {
     try {
         const response = await axios.get(`${MANGADEX_API}/manga/${req.params.id}/feed`, {
-            params: { 
-                limit: 500, 
-                order: { chapter: 'asc' }, 
-                translatedLanguage: ['en'],
-                contentRating: ['safe', 'suggestive', 'erotica', 'pornographic']
-            },
+            params: { limit: 500, order: { chapter: 'asc' }, translatedLanguage: ['en'], contentRating: ['safe', 'suggestive', 'erotica', 'pornographic'] },
             timeout: 10000
         });
 
         const chapters = response.data.data;
-        
-        let warningNotice = '';
-        if (!chapters || chapters.length < 5) {
-            warningNotice = `
-                <div class="warning-box">
-                    ⚠️ <b>Notice:</b> Some chapters may be unavailable on MangaDex due to publisher copyright blockades.
-                </div>
-            `;
-        }
-
         if (!chapters || chapters.length === 0) {
-            return res.send(`
-                <html><head>${UI_STYLE}</head><body>
-                ${warningNotice}
-                <p style="color:#ef4444;">No readable English scanlations found in this database repository.</p>
-                <a href="/">Home</a>
-                </body></html>
-            `);
+            return res.send(`<html><head>${UI_STYLE}</head><body><p>No English chapters found.</p><a href="/">Home</a></body></html>`);
         }
-
-        const firstChapterId = chapters[0].id;
-        const lastChapterId = chapters[chapters.length - 1].id;
 
         let chapterHtml = '';
         chapters.forEach(chap => {
@@ -190,37 +142,30 @@ app.get('/manga/:id', async (req, res) => {
         });
 
         res.send(`
-            <html>
-            <head>${UI_STYLE}</head>
-            <body>
-                ${warningNotice}
-                <h3>Controls:</h3>
-                <div style="margin:15px 0;">
-                    <a href="/chapter/${firstChapterId}" class="btn-green">READ FROM START</a>
-                    <a href="/chapter/${lastChapterId}" class="btn-orange">READ FROM END</a>
+            <html><head>${UI_STYLE}</head><body>
+                <div style="margin:10px 0;">
+                    <a href="/chapter/${chapters[0].id}" class="btn-green">START READING</a>
                 </div>
-                <hr style="border-color:#334155;"/>
                 <h3>Chapters (${chapters.length}):</h3>
                 <ul>${chapterHtml}</ul>
-                <br/>
-                <a href="/" style="color:#ef4444;"><- Home</a>
-            </body>
-            </html>
+                <br/><a href="/" style="color:#ef4444;"><- Home</a>
+            </body></html>
         `);
     } catch (err) {
-        res.status(500).send("Error compiling core database feed.");
+        res.status(500).send("Error reading chapter index lists.");
     }
 });
 
-// 4. Chapter Viewer Route with Built-in Zoom Controls
+// 4. Chapter Viewer (With 5 and 6 Keypad Controls)
 app.get('/chapter/:id', async (req, res) => {
     try {
         const pageIndex = parseInt(req.query.p) || 0;
-        const zoom = req.query.z || "100"; // Read current zoom multiplier string
+        
+        // Default zoom is 100%. Each tap increases/decreases by 75% steps dynamically.
+        const currentZoom = parseInt(req.query.z) || 100; 
 
         const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`, { timeout: 8000 });
         const hash = connResponse.data.chapter.hash;
-        const fallbackBaseUrl = "https://uploads.mangadex.org";
         
         let pageArray = connResponse.data.chapter.dataSaver;
         let folder = 'data-saver';
@@ -235,23 +180,20 @@ app.get('/chapter/:id', async (req, res) => {
         }
 
         const directImgUrl = `${connResponse.data.baseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
-        const clusterBackupUrl = `${fallbackBaseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
-        
-        // Target dynamic bypass proxy route
-        const tunnelImgSrc = `/image-stream?url=${encodeURIComponent(directImgUrl)}&backup=${encodeURIComponent(clusterBackupUrl)}`;
+        const tunnelImgSrc = `/image-stream?url=${encodeURIComponent(directImgUrl)}&backup=${encodeURIComponent(`https://uploads.mangadex.org/${folder}/${hash}/${pageArray[pageIndex]}`)}`;
 
+        // Navigation strings 
         const nextLink = pageIndex < pageArray.length - 1 
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}&z=${zoom}" style="color:#4ade80; font-size:20px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:10px 0; border:1px solid #475569; text-decoration:none;">NEXT PAGE -></a>` 
-            : '<span style="color:#94a3b8; display:block; margin:10px 0;">Chapter Finished</span>';
+            ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}&z=${currentZoom}" style="color:#4ade80; font-size:18px; font-weight:bold; display:block; padding:10px; background:#1e293b; margin:8px 0; border:1px solid #475569;">NEXT PAGE -></a>` 
+            : '<span style="color:#94a3b8; display:block; margin:8px 0;">End of Chapter</span>';
             
         const prevLink = pageIndex > 0  
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}&z=${zoom}" style="color:#f97316;"><- Previous Page</a>` 
+            ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}&z=${currentZoom}" style="color:#f97316;"><- Prev Page</a>` 
             : '';
 
-        // Preserves page state when applying image transformations
-        const zoomOutHref = `/chapter/${req.params.id}?p=${pageIndex}&z=100`;
-        const zoomMedHref = `/chapter/${req.params.id}?p=${pageIndex}&z=175`;
-        const zoomMaxHref = `/chapter/${req.params.id}?p=${pageIndex}&z=250`;
+        // Calculate steps for keypad adjustments
+        const zoomInVal = currentZoom + 75;
+        const zoomOutVal = currentZoom > 100 ? currentZoom - 75 : 100;
 
         res.send(`
             <html>
@@ -260,65 +202,50 @@ app.get('/chapter/:id', async (req, res) => {
                 ${UI_STYLE}
             </head>
             <body style="text-align:center;">
-                <div style="padding:5px; background:#1e293b; font-size:13px; color:#94a3b8;">Page ${pageIndex + 1} / ${pageArray.length}</div>
+                <div style="font-size:12px; color:#94a3b8; padding:2px;">Page ${pageIndex + 1} / ${pageArray.length} (${currentZoom}%)</div>
                 
-                <div style="margin:8px 0; background:#111827; padding:6px; border-radius:4px;">
-                    <span style="font-size:11px; color:#94a3b8; display:block; margin-bottom:4px;">Text size control:</span>
-                    <a class="zoom-btn ${zoom === '100' ? 'active-zoom' : ''}" href="${zoomOutHref}">Fit Screen</a>
-                    <a class="zoom-btn ${zoom === '175' ? 'active-zoom' : ''}" href="${zoomMedHref}">Medium Zoom</a>
-                    <a class="zoom-btn ${zoom === '250' ? 'active-zoom' : ''}" href="${zoomMaxHref}">Max Text</a>
+                <div style="display:none;">
+                    <a href="/chapter/${req.params.id}?p=${pageIndex}&z=${zoomInVal}" accesskey="5">Zoom In</a>
+                    <a href="/chapter/${req.params.id}?p=${pageIndex}&z=${zoomOutVal}" accesskey="6">Zoom Out</a>
                 </div>
+
+                <div class="key-hint">Press <b>5</b> to Zoom In | Press <b>6</b> to Zoom Out</div>
 
                 <div class="scroll-container">
-                    <img src="${tunnelImgSrc}" style="width:${zoom}%; max-width:none; height:auto; display:block; margin:0 auto;" alt="Manga Page content..." />
+                    <img src="${tunnelImgSrc}" style="width:${currentZoom}%; max-width:none; height:auto; display:block; margin:0 auto;" alt="Manga Page" />
                 </div>
 
-                <div style="margin:15px 0;">
+                <div style="margin:10px 0;">
                     ${nextLink}
-                    <br/>
                     ${prevLink}
                 </div>
                 <hr style="border-color:#334155;"/>
-                <a href="/" style="color:#ef4444;">Exit Reader</a>
+                <a href="/" style="color:#ef4444;">Exit</a>
             </body>
             </html>
         `);
     } catch (err) {
-        res.send(`<html><head>${UI_STYLE}</head><body><h3>Image Pipeline Timeout</h3><p>MangaDex server lines are busy.</p><a href="javascript:location.reload()">Reload Page</a></body></html>`);
+        res.send(`<html><head>${UI_STYLE}</head><body><h3>Timeout Error</h3><a href="javascript:location.reload()">Retry</a></body></html>`);
     }
 });
 
-// 5. Secure Binary Pass-Through Stream Proxy (Low Memory Footprint)
+// 5. Proxy Stream Tunnel
 app.get('/image-stream', async (req, res) => {
     const targetUrl = req.query.url;
     const backupUrl = req.query.backup;
-    if (!targetUrl) return res.status(400).send("No target URL provided.");
-
     try {
-        const streamResponse = await axios({
-            method: 'get',
-            url: targetUrl,
-            responseType: 'stream',
-            timeout: 5000
-        });
-
+        const streamResponse = await axios({ method: 'get', url: targetUrl, responseType: 'stream', timeout: 5000 });
         res.setHeader('Content-Type', 'image/jpeg');
         return streamResponse.data.pipe(res);
     } catch (err) {
-        // Drop bad node connection instantly and route through central data array fallback cluster
         try {
-            const backupResponse = await axios({
-                method: 'get',
-                url: backupUrl,
-                responseType: 'stream',
-                timeout: 6000
-            });
+            const backupResponse = await axios({ method: 'get', url: backupUrl, responseType: 'stream', timeout: 6000 });
             res.setHeader('Content-Type', 'image/jpeg');
             return backupResponse.data.pipe(res);
-        } catch (backupErr) {
-            res.status(500).send("All proxy pipelines dropped connection.");
+        } catch (bErr) {
+            res.status(500).send("Stream error.");
         }
     }
 });
 
-app.listen(PORT, () => console.log(`Production engine streaming on port ${PORT}`));
+app.listen(PORT, () => console.log(`Keypad core operational on ${PORT}`));
