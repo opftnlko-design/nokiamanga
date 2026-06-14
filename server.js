@@ -24,14 +24,12 @@ const UI_STYLE = `
         .genre-link { display: inline-block; background: #334155; color: #fff; padding: 3px 6px; margin: 2px; border-radius: 2px; font-size: 11px; }
         ul { padding-left: 12px; margin: 8px 0; }
         li { margin-bottom: 10px; }
-        .btn-green { background: #16a34a; color: #fff; padding: 6px; font-weight: bold; display: inline-block; border-radius: 2px; margin-right: 4px; text-decoration: none; }
+        .btn-green { background: #16a34a; color: #fff; padding: 8px; font-weight: bold; display: block; text-align: center; border-radius: 3px; text-decoration: none; margin: 5px 0; }
         
-        /* Interactive D-Pad Zoom Controls */
-        .zoom-control-btn { display: inline-block; background: #2563eb; color: #ffffff; padding: 8px 14px; font-weight: bold; font-size: 14px; border: 1px solid #3b82f6; border-radius: 4px; text-decoration: none; margin: 4px; }
-        .zoom-control-btn:focus { background: #eab308; color: #000000; border-color: #ffffff; }
-        
-        .scroll-container { width: 100%; overflow-x: auto; overflow-y: hidden; background: #000; border-top: 2px solid #334155; border-bottom: 2px solid #334155; text-align: left; }
-        .img-link { display: block; border: none; text-decoration: none; padding: 0; margin: 0; }
+        /* Cleaned Layout optimized for native Opera Mobile Viewport scaling */
+        .manga-frame { display: block; width: 100%; text-align: center; margin: 8px 0; }
+        .manga-img { width: 100%; max-width: 320px; height: auto; border: 1px solid #334155; display: block; margin: 0 auto; }
+        .info-hint { font-size: 11px; color: #a1a1aa; margin-bottom: 6px; display: block; }
     </style>
 `;
 
@@ -68,7 +66,7 @@ app.get('/', async (req, res) => {
             listHtml += `<li><a href="/manga/${manga.id}" style="color: #4ade80; font-weight:bold;">${name}</a></li>`;
         });
     } catch (err) {
-        listHtml = '<li>Failed to load feed. Refresh.</li>';
+        listHtml = '<li>Failed to load feed.</li>';
     }
 
     const nextPage = page + 1;
@@ -78,7 +76,7 @@ app.get('/', async (req, res) => {
         <html>
         <head><meta name="viewport" content="width=device-width, initial-scale=1.0">${UI_STYLE}</head>
         <body>
-            <h3 style="color:#2563eb; margin:4px 0;">Nokia Manga Pro v3</h3>
+            <h3 style="color:#2563eb; margin:4px 0;">Nokia Manga Pro v4</h3>
             <form action="/search" method="GET">
                 <input type="text" name="title" placeholder="Search..." required />
                 <button type="submit">Go</button>
@@ -160,16 +158,15 @@ app.get('/manga/:id', async (req, res) => {
     }
 });
 
-// 4. Chapter Viewer (Forced High-Definition Original Track Engine)
+// 4. Chapter Viewer (Instant Hand-off Delivery System)
 app.get('/chapter/:id', async (req, res) => {
     try {
         const pageIndex = parseInt(req.query.p) || 0;
-        const currentZoom = parseInt(req.query.z) || 100; 
 
-        const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`, { timeout: 8000 });
+        const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`, { timeout: 6000 });
         const hash = connResponse.data.chapter.hash;
         
-        // FIX: Replaced compressed 'dataSaver' with 'data' to force uncompressed source files
+        // High-definition original file tracks selected for crisp canvas expansion
         let pageArray = connResponse.data.chapter.data;
         let folder = 'data';
         
@@ -183,21 +180,17 @@ app.get('/chapter/:id', async (req, res) => {
         }
 
         const directImgUrl = `${connResponse.data.baseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
-        const tunnelImgSrc = `/image-stream?url=${encodeURIComponent(directImgUrl)}&backup=${encodeURIComponent(`https://uploads.mangadex.org/${folder}/${hash}/${pageArray[pageIndex]}`)}`;
+        const fallbackImgUrl = `https://uploads.mangadex.org/${folder}/${hash}/${pageArray[pageIndex]}`;
 
-        // Controlled 50% steps for cleaner scaling on lower resolution hardware
-        const stepUpZoom = currentZoom + 50;
-        const stepDownZoom = currentZoom > 100 ? currentZoom - 50 : 100;
-
-        const zoomInUrl = `/chapter/${req.params.id}?p=${pageIndex}&z=${stepUpZoom}`;
-        const zoomOutUrl = `/chapter/${req.params.id}?p=${pageIndex}&z=${stepDownZoom}`;
+        // Stream addresses targeting the high-velocity redirection pipeline
+        const imageViewerEndpoint = `/image-stream?url=${encodeURIComponent(directImgUrl)}&backup=${encodeURIComponent(fallbackImgUrl)}`;
 
         const nextLink = pageIndex < pageArray.length - 1 
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}&z=${currentZoom}" style="color:#4ade80; font-size:18px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:10px 0; border:1px solid #475569;">NEXT PAGE -></a>` 
+            ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}" style="color:#4ade80; font-size:18px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:10px 0; border:1px solid #475569; text-decoration:none;">NEXT PAGE -></a>` 
             : '<span style="color:#94a3b8; display:block; margin:8px 0;">End of Chapter</span>';
             
         const prevLink = pageIndex > 0  
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}&z=${currentZoom}" style="color:#f97316; display:inline-block; margin-top:8px;"><- Prev Page</a>` 
+            ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}" style="color:#f97316; display:inline-block; margin-top:5px;"><- Previous Page</a>` 
             : '';
 
         res.send(`
@@ -207,50 +200,43 @@ app.get('/chapter/:id', async (req, res) => {
                 ${UI_STYLE}
             </head>
             <body style="text-align:center;">
-                <div style="font-size:12px; color:#94a3b8; padding:3px;">Page ${pageIndex + 1} / ${pageArray.length} [HD Scale: ${currentZoom}%]</div>
+                <div style="font-size:12px; color:#94a3b8; padding:2px;">Page ${pageIndex + 1} / ${pageArray.length}</div>
                 
-                <div style="margin: 5px 0;">
-                    <a class="zoom-control-btn" href="${zoomInUrl}">[+] Zoom In</a>
-                    <a class="zoom-control-btn" href="${zoomOutUrl}">[-] Zoom Out</a>
-                </div>
+                <span class="info-hint">💡 Click image to open Full Screen for built-in Opera zoom</span>
 
-                <div class="scroll-container">
-                    <a class="img-link" href="${zoomInUrl}">
-                        <img src="${tunnelImgSrc}" style="width:${currentZoom}%; max-width:none; height:auto; display:block; margin:0 auto;" alt="Manga HD View" />
+                <div class="manga-frame">
+                    <a href="${imageViewerEndpoint}" target="_self">
+                        <img src="${imageViewerEndpoint}" class="manga-img" alt="Manga Page Content Frame" />
                     </a>
                 </div>
 
-                <div style="margin:12px 0;">
+                <div style="margin:10px 0;">
                     ${nextLink}
                     ${prevLink}
                 </div>
-                <hr style="border-color:#334155;"/>
+                <hr style="border-color:#334155; margin:10px 0;"/>
                 <a href="/" style="color:#ef4444; font-weight:bold;">Exit Reader</a>
             </body>
             </html>
         `);
     } catch (err) {
-        res.send(`<html><head>${UI_STYLE}</head><body><h3>HD Pipeline Error</h3><a href="javascript:location.reload()">Retry</a></body></html>`);
+        res.send(`<html><head>${UI_STYLE}</head><body><h3>Data Fetching Timeout</h3><a href="javascript:location.reload()">Tap to retry</a></body></html>`);
     }
 });
 
-// 5. Proxy Stream Tunnel
+// 5. High-Velocity HTTP 302 Redirection Gateway (Bypasses Memory Latency)
 app.get('/image-stream', async (req, res) => {
     const targetUrl = req.query.url;
     const backupUrl = req.query.backup;
+    if (!targetUrl) return res.status(400).send("Missing target parameter tracks.");
+
+    // Fix: Instead of downloading the image data buffer onto your server, 
+    // we instantly route Opera Mini directly to the source content network.
     try {
-        const streamResponse = await axios({ method: 'get', url: targetUrl, responseType: 'stream', timeout: 7000 });
-        res.setHeader('Content-Type', 'image/jpeg');
-        return streamResponse.data.pipe(res);
+        return res.redirect(302, targetUrl);
     } catch (err) {
-        try {
-            const backupResponse = await axios({ method: 'get', url: backupUrl, responseType: 'stream', timeout: 8000 });
-            res.setHeader('Content-Type', 'image/jpeg');
-            return backupResponse.data.pipe(res);
-        } catch (bErr) {
-            res.status(500).send("Stream error.");
-        }
+        return res.redirect(302, backupUrl);
     }
 });
 
-app.listen(PORT, () => console.log(`HD Engine online on port ${PORT}`));
+app.listen(PORT, () => console.log(`Redirection optimization micro-engine running on port ${PORT}`));
