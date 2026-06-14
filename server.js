@@ -5,8 +5,29 @@ const PORT = process.env.PORT || 3000;
 
 const MANGADEX_API = 'https://api.mangadex.org';
 
-// Home Page: Basic search bar structured for low-res screens
-app.get('/', (req, res) => {
+// Home Page: Includes Search bar AND Suggested popular titles
+app.get('/', async (req, res) => {
+    let suggestionsHtml = '<li>Loading suggestions...</li>';
+    
+    try {
+        // Fetch top popular, completed or ongoing manga in English
+        const response = await axios.get(`${MANGADEX_API}/manga`, {
+            params: {
+                limit: 5,
+                order: { followedCount: 'desc' }, // Sort by most popular
+                availableTranslatedLanguage: ['en']
+            }
+        });
+
+        suggestionsHtml = '';
+        response.data.data.forEach(manga => {
+            const name = manga.attributes.title.en || Object.values(manga.attributes.title)[0] || 'Unknown Title';
+            suggestionsHtml += `<li><a href="/manga/${manga.id}" style="color: #00ff00;">${name}</a></li><br/>`;
+        });
+    } catch (err) {
+        suggestionsHtml = '<li>Failed to load popular suggestions.</li>';
+    }
+
     res.send(`
         <html>
         <head>
@@ -14,26 +35,43 @@ app.get('/', (req, res) => {
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
                 body { background: #000; color: #fff; font-family: monospace; padding: 10px; }
-                input, button { padding: 5px; font-size: 14px; width: 100%; margin-bottom: 10px; }
+                input, button { padding: 5px; font-size: 14px; width: 100%; margin-bottom: 10px; box-sizing: border-box; }
+                ul { padding-left: 20px; }
             </style>
         </head>
         <body>
             <h2>Nokia 216 Manga Reader</h2>
+            
             <form action="/search" method="GET">
-                <input type="text" name="title" placeholder="Search manga title..." required />
-                <button type="submit">Search</button>
+                <input type="text" name="title" placeholder="Type title (e.g. Solo Leveling)" required />
+                <button type="submit">Search Manga</button>
             </form>
+            
+            <hr style="border-color: #333; margin: 20px 0;"/>
+            
+            <h3>Suggested Manga:</h3>
+            <ul>
+                ${suggestionsHtml}
+            </ul>
         </body>
         </html>
     `);
 });
 
-// Search Results Page
+// Search Results Page (Fixed URL Handling)
 app.get('/search', async (req, res) => {
     const title = req.query.title;
+    if (!title) {
+        return res.redirect('/');
+    }
+
     try {
         const response = await axios.get(`${MANGADEX_API}/manga`, {
-            params: { title: title, limit: 10 }
+            params: { 
+                title: title, 
+                limit: 15,
+                availableTranslatedLanguage: ['en']
+            }
         });
         
         let listHtml = '';
@@ -46,13 +84,14 @@ app.get('/search', async (req, res) => {
             <html>
             <body style="background:#000; color:#fff; font-family:monospace; padding:10px;">
                 <h3>Results for "${title}":</h3>
-                <ul>${listHtml || '<li>No manga found</li>'}</ul>
-                <a href="/" style="color:#ff0000;"><- Back</a>
+                <ul>${listHtml || '<li>No manga found. Try checking the spelling!</li>'}</ul>
+                <br/>
+                <a href="/" style="color:#ff0000; font-size: 16px;"><- Back to Home</a>
             </body>
             </html>
         `);
     } catch (err) {
-        res.status(500).send("Error searching MangaDex. Try again.");
+        res.status(500).send("Error searching MangaDex. Try going back and searching again.");
     }
 });
 
@@ -60,7 +99,11 @@ app.get('/search', async (req, res) => {
 app.get('/manga/:id', async (req, res) => {
     try {
         const response = await axios.get(`${MANGADEX_API}/manga/${req.params.id}/feed`, {
-            params: { limit: 50, order: { chapter: 'asc' }, translatedLanguage: ['en'] }
+            params: { 
+                limit: 50, 
+                order: { chapter: 'asc' }, 
+                translatedLanguage: ['en'] 
+            }
         });
 
         let chapterHtml = '';
@@ -75,36 +118,33 @@ app.get('/manga/:id', async (req, res) => {
             <html>
             <body style="background:#000; color:#fff; font-family:monospace; padding:10px;">
                 <h3>Chapters:</h3>
-                <ul>${chapterHtml || '<li>No translated chapters found.</li>'}</ul>
+                <ul>${chapterHtml || '<li>No English chapters found for this specific title.</li>'}</ul>
+                <br/>
                 <a href="/" style="color:#ff0000;"><- Home</a>
             </body>
             </html>
         `);
     } catch (err) {
-        res.status(500).send("Error loading chapters.");
+        res.status(500).send("Error loading chapters. This manga's external feed might be restricted.");
     }
 });
 
-// Chapter Viewer Page (The Core Feature)
+// Chapter Viewer Page
 app.get('/chapter/:id', async (req, res) => {
     try {
-        // 1. Get chapter details & server configurations
         const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`);
         const hash = connResponse.data.chapter.hash;
-        const pageArray = connResponse.data.chapter.dataSaver; // 'dataSaver' yields heavily compressed files perfect for Nokia 216
+        const pageArray = connResponse.data.chapter.dataSaver; 
         const baseUrl = connResponse.data.baseUrl;
 
-        // 2. Get current page index from URL query parameters (defaults to page 0)
         const pageIndex = parseInt(req.query.p) || 0;
         
         if (pageIndex < 0 || pageIndex >= pageArray.length) {
-            return res.send("Invalid page.");
+            return res.send("Invalid page block.");
         }
 
-        // 3. Build the official CDN URL for this specific page image
         const imgUrl = `${baseUrl}/data-saver/${hash}/${pageArray[pageIndex]}`;
 
-        // 4. Generate highly compressed UI navigation tags
         const nextLink = pageIndex < pageArray.length - 1 ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}" style="color:#00ff00; font-size:20px; font-weight:bold;">NEXT PAGE -></a>` : '<span>End of Chapter</span>';
         const prevLink = pageIndex > 0 ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}" style="color:#ffaa00;"><- Prev Page</a>` : '';
 
@@ -117,7 +157,7 @@ app.get('/chapter/:id', async (req, res) => {
                 <div style="padding:5px;">Page ${pageIndex + 1} / ${pageArray.length}</div>
                 
                 <div style="margin: 10px 0;">
-                    <img src="${imgUrl}" style="max-width:100%; height:auto; border:1px solid #333;" alt="Manga Page" />
+                    <img src="${imgUrl}" style="max-width:100%; height:auto; border:1px solid #333;" />
                 </div>
 
                 <div style="margin:15px 0;">
@@ -131,8 +171,8 @@ app.get('/chapter/:id', async (req, res) => {
             </html>
         `);
     } catch (err) {
-        res.status(500).send("Error rendering chapter page. Try refreshing.");
+        res.status(500).send("Error loading this page. Try pressing back and reloading.");
     }
 });
 
-app.listen(PORT, () => console.log(`Nokia Manga Engine running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Nokia Manga Engine online on port ${PORT}`));
