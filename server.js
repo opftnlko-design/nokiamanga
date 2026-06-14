@@ -1,6 +1,5 @@
 const express = require('express');
 const axios = require('axios');
-const sharp = require('sharp'); // Forces crystal clear text rendering server-side
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -27,13 +26,21 @@ const UI_STYLE = `
         li { margin-bottom: 10px; }
         .btn-green { background: #16a34a; color: #fff; padding: 8px; font-weight: bold; display: block; text-align: center; border-radius: 3px; text-decoration: none; margin: 5px 0; }
         
-        /* Nokia Button Phone Optimized Display Controls */
-        .zoom-bar { background: #1e293b; padding: 4px; margin: 4px 0; border-radius: 4px; border: 1px solid #334155; }
-        .zoom-btn { display: inline-block; background: #2563eb; color: #ffffff; padding: 5px 10px; font-weight: bold; font-size: 13px; border-radius: 3px; text-decoration: none; margin: 2px; }
-        .zoom-btn:focus { background: #eab308; color: #000; }
+        /* Nokia Core Zoom-Pad Interface */
+        .zoom-panel { background: #1e293b; padding: 6px; margin: 5px 0; border: 1px solid #334155; text-align: center; border-radius: 4px; }
+        .zoom-lnk { display: inline-block; background: #2563eb; color: #fff; padding: 6px 12px; font-weight: bold; font-size: 13px; border-radius: 3px; text-decoration: none; margin: 2px; }
+        .zoom-lnk:focus { background: #eab308; color: #000; }
         
-        .manga-container { width: 100%; overflow-x: auto; background: #000; text-align: center; padding: 4px 0; }
-        .manga-render { display: block; margin: 0 auto; border: 1px solid #475569; }
+        /* CSS Sharpening Filters targeting low-res mobile screens */
+        .manga-wrapper { width: 100%; overflow-x: auto; background: #000; text-align: center; }
+        .manga-img { 
+            display: block; 
+            margin: 0 auto; 
+            border: 1px solid #475569;
+            image-rendering: -webkit-optimize-contrast; /* Forces Opera Mini to keep edges sharp */
+            image-rendering: crisp-edges; 
+            image-rendering: pixelated;
+        }
     </style>
 `;
 
@@ -80,7 +87,7 @@ app.get('/', async (req, res) => {
         <html>
         <head><meta name="viewport" content="width=device-width, initial-scale=1.0">${UI_STYLE}</head>
         <body>
-            <h3 style="color:#2563eb; margin:4px 0;">Nokia Manga Pro Ultra</h3>
+            <h3 style="color:#2563eb; margin:4px 0;">Nokia Manga Custom Core</h3>
             <form action="/search" method="GET">
                 <input type="text" name="title" placeholder="Search..." required />
                 <button type="submit">Go</button>
@@ -126,7 +133,7 @@ app.get('/search', async (req, res) => {
     }
 });
 
-// 3. Manga Feed & Chapter List
+// 3. Manga Chapter Feed List
 app.get('/manga/:id', async (req, res) => {
     try {
         const response = await axios.get(`${MANGADEX_API}/manga/${req.params.id}/feed`, {
@@ -162,25 +169,24 @@ app.get('/manga/:id', async (req, res) => {
     }
 });
 
-// 4. Chapter Viewer (Ultra-Optimized Server-Side Processing)
+// 4. Balanced Viewer Module (No Fullscreen, Rapid Loading, Sharp Text)
 app.get('/chapter/:id', async (req, res) => {
     try {
         const pageIndex = parseInt(req.query.p) || 0;
         
-        // Target image pixel-width engine instead of percentage layout stretching
-        // Default 450px is clear, can zoom up to 750px, 1050px, etc.
-        const serverWidth = parseInt(req.query.w) || 450; 
+        // Dynamic CSS scaling width parameters (Default starting base size: 130%)
+        const zoomFactor = parseInt(req.query.z) || 130; 
 
         const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`, { timeout: 8000 });
         const hash = connResponse.data.chapter.hash;
         
-        // Always extract full HD data source channels
-        let pageArray = connResponse.data.chapter.data;
-        let folder = 'data';
+        // High-Quality Data Saver files balance crisp readability and maximum network speed
+        let pageArray = connResponse.data.chapter.dataSaver;
+        let folder = 'data-saver';
         
         if (!pageArray || pageArray.length === 0) {
-            pageArray = connResponse.data.chapter.dataSaver;
-            folder = 'data-saver';
+            pageArray = connResponse.data.chapter.data;
+            folder = 'data';
         }
 
         if (pageIndex < 0 || pageIndex >= pageArray.length) {
@@ -190,107 +196,64 @@ app.get('/chapter/:id', async (req, res) => {
         const directImgUrl = `${connResponse.data.baseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
         const fallbackImgUrl = `https://uploads.mangadex.org/${folder}/${hash}/${pageArray[pageIndex]}`;
 
-        // Send parameters to the server-side Sharp processing endpoint
-        const cleanProcessedImgSrc = `/image-processing?url=${encodeURIComponent(directImgUrl)}&backup=${encodeURIComponent(fallbackImgUrl)}&width=${serverWidth}`;
+        // Stream link directly routes to the fast pipeline
+        const optimizedImgUrl = `/image-pipeline?url=${encodeURIComponent(directImgUrl)}&backup=${encodeURIComponent(fallbackImgUrl)}`;
 
-        // Zoom parameters handling pixel widths natively
-        const zoomInWidth = serverWidth + 200;
-        const zoomOutWidth = serverWidth > 450 ? serverWidth - 200 : 450;
+        const stepUpZoom = zoomFactor + 40;
+        const stepDownZoom = zoomFactor > 100 ? zoomFactor - 40 : 100;
 
-        const zoomInUrl = `/chapter/${req.params.id}?p=${pageIndex}&w=${zoomInWidth}`;
-        const zoomOutUrl = `/chapter/${req.params.id}?p=${pageIndex}&w=${zoomOutWidth}`;
+        const zoomInUrl = `/chapter/${req.params.id}?p=${pageIndex}&z=${stepUpZoom}`;
+        const zoomOutUrl = `/chapter/${req.params.id}?p=${pageIndex}&z=${stepDownZoom}`;
 
         const nextLink = pageIndex < pageArray.length - 1 
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}&w=${serverWidth}" style="color:#4ade80; font-size:18px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:8px 0; border:1px solid #475569; text-decoration:none;">NEXT PAGE -></a>` 
+            ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}&z=${zoomFactor}" style="color:#4ade80; font-size:18px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:8px 0; border:1px solid #475569; text-decoration:none;">NEXT PAGE -></a>` 
             : '<span style="color:#94a3b8; display:block; margin:8px 0;">End of Chapter</span>';
             
         const prevLink = pageIndex > 0  
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}&w=${serverWidth}" style="color:#f97316; display:inline-block; margin-top:4px;"><- Prev Page</a>` 
+            ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}&z=${zoomFactor}" style="color:#f97316; display:inline-block; margin-top:4px;"><- Prev Page</a>` 
             : '';
 
         res.send(`
             <html>
             <head>
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
                 ${UI_STYLE}
             </head>
             <body style="text-align:center;">
-                <div style="font-size:12px; color:#94a3b8;">Page ${pageIndex + 1} / ${pageArray.length} [Width: ${serverWidth}px]</div>
+                <div style="font-size:11px; color:#94a3b8;">Page ${pageIndex + 1} / ${pageArray.length} (Scale: ${zoomFactor}%)</div>
                 
-                <div class="zoom-bar">
-                    <a class="zoom-btn" href="${zoomInUrl}">🔎 Zoom In (+200px)</a>
-                    <a class="zoom-btn" href="${zoomOutUrl}">🔍 Zoom Out</a>
+                <div class="zoom-panel">
+                    <a class="zoom-lnk" href="${zoomInUrl}">[+] Zoom In</a>
+                    <a class="zoom-lnk" href="${zoomOutUrl}">[-] Zoom Out</a>
                 </div>
 
-                <div class="manga-container">
+                <div class="manga-wrapper">
                     <a href="${zoomInUrl}" style="border:none; display:block;">
-                        <img src="${cleanProcessedImgSrc}" class="manga-render" style="width:100%; max-width:${serverWidth}px; height:auto;" alt="Optimized Manga Page" />
+                        <img src="${optimizedImgUrl}" class="manga-img" style="width:${zoomFactor}%; max-width:none; height:auto;" alt="Manga Content Stream" />
                     </a>
-                </div>
-
-                <div class="zoom-bar">
-                    <a class="zoom-btn" href="${zoomInUrl}">🔎 Zoom In</a>
                 </div>
 
                 <div style="margin:10px 0;">
                     ${nextLink}
                     ${prevLink}
                 </div>
-                <hr style="border-color:#334155; margin:8px 0;"/>
+                <hr style="border-color:#334155; margin:6px 0;"/>
                 <a href="/" style="color:#ef4444; font-weight:bold;">Exit Reader</a>
             </body>
             </html>
         `);
     } catch (err) {
-        res.send(`<html><head>${UI_STYLE}</head><body><h3>Data Load Error</h3><a href="javascript:location.reload()">Retry</a></body></html>`);
+        res.send(`<html><head>${UI_STYLE}</head><body><h3>Data Fetching Timeout</h3><a href="javascript:location.reload()">Tap to retry</a></body></html>`);
     }
 });
 
-// 5. Advanced Server-Side Image Sharpness Engine (Saves Data & Restores Sharp Text)
-app.get('/image-processing', async (req, res) => {
+// 5. Lightning Fast Proxy Redirect Mirror
+app.get('/image-pipeline', async (req, res) => {
     const targetUrl = req.query.url;
-    const backupUrl = req.query.backup;
-    const renderWidth = parseInt(req.query.width) || 450;
-
-    if (!targetUrl) return res.status(400).send("Missing source image link.");
-
-    let finalStreamData;
+    if (!targetUrl) return res.status(400).send("Missing endpoint track parameters.");
     
-    try {
-        // Fetch raw HD image binary data from target
-        const imgResponse = await axios({ method: 'get', url: targetUrl, responseType: 'arraybuffer', timeout: 7000 });
-        finalStreamData = imgResponse.data;
-    } catch (err) {
-        try {
-            // Fallback to secondary source mirror
-            const backupResponse = await axios({ method: 'get', url: backupUrl, responseType: 'arraybuffer', timeout: 7000 });
-            finalStreamData = backupResponse.data;
-        } catch (bErr) {
-            return res.status(500).send("Failed to retrieve source files.");
-        }
-    }
-
-    try {
-        // High-fidelity vector layout sharpening algorithm via Sharp
-        const processedImageBuffer = await sharp(finalStreamData)
-            .resize({
-                width: renderWidth,
-                withoutEnlargement: false,
-                fastShrinkOnLoad: true
-            })
-            .jpeg({ 
-                quality: 90, // Keeps the quality high so text nodes stay completely smooth
-                chromaSubsampling: '4:4:4' // Disables heavy color compression to keep black text lines sharp
-            })
-            .toBuffer();
-
-        res.setHeader('Content-Type', 'image/jpeg');
-        res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache on proxy to make subsequent loads instant
-        return res.send(processedImageBuffer);
-
-    } catch (processError) {
-        return res.status(500).send("Image sharpening calculation processing error.");
-    }
+    // 302 Redirect lets MangaDex's CDN do the heavy image delivery lifting instantly
+    return res.redirect(302, targetUrl);
 });
 
-app.listen(PORT, () => console.log(`Sharp text-rendering engine operational on ${PORT}`));
+app.listen(PORT, () => console.log(`Custom Nokia Proxy Core Live on ${PORT}`));
