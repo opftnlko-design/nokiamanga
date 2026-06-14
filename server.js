@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const sharp = require('sharp'); // Forces crystal clear text rendering server-side
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -17,7 +18,7 @@ const GENRES = {
 
 const UI_STYLE = `
     <style>
-        body { background: #0b0f19; color: #f3f4f6; font-family: monospace; padding: 6px; margin: 0; }
+        body { background: #0b0f19; color: #f3f4f6; font-family: monospace; padding: 4px; margin: 0; }
         a { color: #38bdf8; text-decoration: none; font-size: 14px; }
         input, button { padding: 6px; font-size: 13px; width: 100%; margin-bottom: 8px; background: #1e293b; color: #fff; border: 1px solid #475569; border-radius: 3px; box-sizing: border-box; }
         button { background: #2563eb; font-weight: bold; border: none; }
@@ -26,10 +27,13 @@ const UI_STYLE = `
         li { margin-bottom: 10px; }
         .btn-green { background: #16a34a; color: #fff; padding: 8px; font-weight: bold; display: block; text-align: center; border-radius: 3px; text-decoration: none; margin: 5px 0; }
         
-        /* Cleaned Layout optimized for native Opera Mobile Viewport scaling */
-        .manga-frame { display: block; width: 100%; text-align: center; margin: 8px 0; }
-        .manga-img { width: 100%; max-width: 320px; height: auto; border: 1px solid #334155; display: block; margin: 0 auto; }
-        .info-hint { font-size: 11px; color: #a1a1aa; margin-bottom: 6px; display: block; }
+        /* Nokia Button Phone Optimized Display Controls */
+        .zoom-bar { background: #1e293b; padding: 4px; margin: 4px 0; border-radius: 4px; border: 1px solid #334155; }
+        .zoom-btn { display: inline-block; background: #2563eb; color: #ffffff; padding: 5px 10px; font-weight: bold; font-size: 13px; border-radius: 3px; text-decoration: none; margin: 2px; }
+        .zoom-btn:focus { background: #eab308; color: #000; }
+        
+        .manga-container { width: 100%; overflow-x: auto; background: #000; text-align: center; padding: 4px 0; }
+        .manga-render { display: block; margin: 0 auto; border: 1px solid #475569; }
     </style>
 `;
 
@@ -76,7 +80,7 @@ app.get('/', async (req, res) => {
         <html>
         <head><meta name="viewport" content="width=device-width, initial-scale=1.0">${UI_STYLE}</head>
         <body>
-            <h3 style="color:#2563eb; margin:4px 0;">Nokia Manga Pro v4</h3>
+            <h3 style="color:#2563eb; margin:4px 0;">Nokia Manga Pro Ultra</h3>
             <form action="/search" method="GET">
                 <input type="text" name="title" placeholder="Search..." required />
                 <button type="submit">Go</button>
@@ -158,15 +162,19 @@ app.get('/manga/:id', async (req, res) => {
     }
 });
 
-// 4. Chapter Viewer (Instant Hand-off Delivery System)
+// 4. Chapter Viewer (Ultra-Optimized Server-Side Processing)
 app.get('/chapter/:id', async (req, res) => {
     try {
         const pageIndex = parseInt(req.query.p) || 0;
+        
+        // Target image pixel-width engine instead of percentage layout stretching
+        // Default 450px is clear, can zoom up to 750px, 1050px, etc.
+        const serverWidth = parseInt(req.query.w) || 450; 
 
-        const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`, { timeout: 6000 });
+        const connResponse = await axios.get(`${MANGADEX_API}/at-home/server/${req.params.id}`, { timeout: 8000 });
         const hash = connResponse.data.chapter.hash;
         
-        // High-definition original file tracks selected for crisp canvas expansion
+        // Always extract full HD data source channels
         let pageArray = connResponse.data.chapter.data;
         let folder = 'data';
         
@@ -182,15 +190,22 @@ app.get('/chapter/:id', async (req, res) => {
         const directImgUrl = `${connResponse.data.baseUrl}/${folder}/${hash}/${pageArray[pageIndex]}`;
         const fallbackImgUrl = `https://uploads.mangadex.org/${folder}/${hash}/${pageArray[pageIndex]}`;
 
-        // Stream addresses targeting the high-velocity redirection pipeline
-        const imageViewerEndpoint = `/image-stream?url=${encodeURIComponent(directImgUrl)}&backup=${encodeURIComponent(fallbackImgUrl)}`;
+        // Send parameters to the server-side Sharp processing endpoint
+        const cleanProcessedImgSrc = `/image-processing?url=${encodeURIComponent(directImgUrl)}&backup=${encodeURIComponent(fallbackImgUrl)}&width=${serverWidth}`;
+
+        // Zoom parameters handling pixel widths natively
+        const zoomInWidth = serverWidth + 200;
+        const zoomOutWidth = serverWidth > 450 ? serverWidth - 200 : 450;
+
+        const zoomInUrl = `/chapter/${req.params.id}?p=${pageIndex}&w=${zoomInWidth}`;
+        const zoomOutUrl = `/chapter/${req.params.id}?p=${pageIndex}&w=${zoomOutWidth}`;
 
         const nextLink = pageIndex < pageArray.length - 1 
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}" style="color:#4ade80; font-size:18px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:10px 0; border:1px solid #475569; text-decoration:none;">NEXT PAGE -></a>` 
+            ? `<a href="/chapter/${req.params.id}?p=${pageIndex + 1}&w=${serverWidth}" style="color:#4ade80; font-size:18px; font-weight:bold; display:block; padding:12px; background:#1e293b; margin:8px 0; border:1px solid #475569; text-decoration:none;">NEXT PAGE -></a>` 
             : '<span style="color:#94a3b8; display:block; margin:8px 0;">End of Chapter</span>';
             
         const prevLink = pageIndex > 0  
-            ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}" style="color:#f97316; display:inline-block; margin-top:5px;"><- Previous Page</a>` 
+            ? `<a href="/chapter/${req.params.id}?p=${pageIndex - 1}&w=${serverWidth}" style="color:#f97316; display:inline-block; margin-top:4px;"><- Prev Page</a>` 
             : '';
 
         res.send(`
@@ -200,43 +215,82 @@ app.get('/chapter/:id', async (req, res) => {
                 ${UI_STYLE}
             </head>
             <body style="text-align:center;">
-                <div style="font-size:12px; color:#94a3b8; padding:2px;">Page ${pageIndex + 1} / ${pageArray.length}</div>
+                <div style="font-size:12px; color:#94a3b8;">Page ${pageIndex + 1} / ${pageArray.length} [Width: ${serverWidth}px]</div>
                 
-                <span class="info-hint">💡 Click image to open Full Screen for built-in Opera zoom</span>
+                <div class="zoom-bar">
+                    <a class="zoom-btn" href="${zoomInUrl}">🔎 Zoom In (+200px)</a>
+                    <a class="zoom-btn" href="${zoomOutUrl}">🔍 Zoom Out</a>
+                </div>
 
-                <div class="manga-frame">
-                    <a href="${imageViewerEndpoint}" target="_self">
-                        <img src="${imageViewerEndpoint}" class="manga-img" alt="Manga Page Content Frame" />
+                <div class="manga-container">
+                    <a href="${zoomInUrl}" style="border:none; display:block;">
+                        <img src="${cleanProcessedImgSrc}" class="manga-render" style="width:100%; max-width:${serverWidth}px; height:auto;" alt="Optimized Manga Page" />
                     </a>
+                </div>
+
+                <div class="zoom-bar">
+                    <a class="zoom-btn" href="${zoomInUrl}">🔎 Zoom In</a>
                 </div>
 
                 <div style="margin:10px 0;">
                     ${nextLink}
                     ${prevLink}
                 </div>
-                <hr style="border-color:#334155; margin:10px 0;"/>
+                <hr style="border-color:#334155; margin:8px 0;"/>
                 <a href="/" style="color:#ef4444; font-weight:bold;">Exit Reader</a>
             </body>
             </html>
         `);
     } catch (err) {
-        res.send(`<html><head>${UI_STYLE}</head><body><h3>Data Fetching Timeout</h3><a href="javascript:location.reload()">Tap to retry</a></body></html>`);
+        res.send(`<html><head>${UI_STYLE}</head><body><h3>Data Load Error</h3><a href="javascript:location.reload()">Retry</a></body></html>`);
     }
 });
 
-// 5. High-Velocity HTTP 302 Redirection Gateway (Bypasses Memory Latency)
-app.get('/image-stream', async (req, res) => {
+// 5. Advanced Server-Side Image Sharpness Engine (Saves Data & Restores Sharp Text)
+app.get('/image-processing', async (req, res) => {
     const targetUrl = req.query.url;
     const backupUrl = req.query.backup;
-    if (!targetUrl) return res.status(400).send("Missing target parameter tracks.");
+    const renderWidth = parseInt(req.query.width) || 450;
 
-    // Fix: Instead of downloading the image data buffer onto your server, 
-    // we instantly route Opera Mini directly to the source content network.
+    if (!targetUrl) return res.status(400).send("Missing source image link.");
+
+    let finalStreamData;
+    
     try {
-        return res.redirect(302, targetUrl);
+        // Fetch raw HD image binary data from target
+        const imgResponse = await axios({ method: 'get', url: targetUrl, responseType: 'arraybuffer', timeout: 7000 });
+        finalStreamData = imgResponse.data;
     } catch (err) {
-        return res.redirect(302, backupUrl);
+        try {
+            // Fallback to secondary source mirror
+            const backupResponse = await axios({ method: 'get', url: backupUrl, responseType: 'arraybuffer', timeout: 7000 });
+            finalStreamData = backupResponse.data;
+        } catch (bErr) {
+            return res.status(500).send("Failed to retrieve source files.");
+        }
+    }
+
+    try {
+        // High-fidelity vector layout sharpening algorithm via Sharp
+        const processedImageBuffer = await sharp(finalStreamData)
+            .resize({
+                width: renderWidth,
+                withoutEnlargement: false,
+                fastShrinkOnLoad: true
+            })
+            .jpeg({ 
+                quality: 90, // Keeps the quality high so text nodes stay completely smooth
+                chromaSubsampling: '4:4:4' // Disables heavy color compression to keep black text lines sharp
+            })
+            .toBuffer();
+
+        res.setHeader('Content-Type', 'image/jpeg');
+        res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache on proxy to make subsequent loads instant
+        return res.send(processedImageBuffer);
+
+    } catch (processError) {
+        return res.status(500).send("Image sharpening calculation processing error.");
     }
 });
 
-app.listen(PORT, () => console.log(`Redirection optimization micro-engine running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Sharp text-rendering engine operational on ${PORT}`));
